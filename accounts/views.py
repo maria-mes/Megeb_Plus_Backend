@@ -5,10 +5,14 @@ from rest_framework.views import APIView
 from rest_framework import status, serializers
 from rest_framework_simplejwt.tokens import RefreshToken
 from .models import User
-from .serializers import RegisterSerializer, UserSerializer
+from .serializers import (
+    RegisterSerializer,
+    UserSerializer,
+    SendOTPSerializer
+)
 from rest_framework.permissions import IsAuthenticated
 from django.contrib.auth import authenticate
-
+from .services.afromessage import send_otp, verify_otp
 class CustomTokenObtainPairSerializer(serializers.Serializer):
     phone = serializers.CharField()
     password = serializers.CharField(write_only=True)
@@ -43,28 +47,35 @@ class MeView(APIView):
             UserSerializer(request.user).data
         )
 
-
 class RegisterView(APIView):
 
     def post(self, request):
-        serializer = RegisterSerializer(data=request.data)
+
+        serializer = RegisterSerializer(
+            data=request.data
+        )
 
         if serializer.is_valid():
+
             user = serializer.save()
 
             return Response(
                 {
-                    "message": "User registered successfully",
-                    "user": UserSerializer(user).data,
+                    "message": "Registration successful.",
+                    "user": {
+                        "id": user.id,
+                        "full_name": user.full_name,
+                        "phone": user.phone,
+                        "is_verified": user.is_verified
+                    }
                 },
-                status=status.HTTP_201_CREATED,
+                status=status.HTTP_201_CREATED
             )
 
         return Response(
             serializer.errors,
-            status=status.HTTP_400_BAD_REQUEST,
+            status=status.HTTP_400_BAD_REQUEST
         )
-
         
 class LoginView(APIView):
 
@@ -80,4 +91,93 @@ class LoginView(APIView):
         return Response(
             serializer.errors,
             status=status.HTTP_400_BAD_REQUEST
+        )
+
+class SendOTPView(APIView):
+
+    def post(self, request):
+
+        serializer = SendOTPSerializer(data=request.data)
+
+        if not serializer.is_valid():
+            return Response(
+                serializer.errors,
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        phone = serializer.validated_data["phone"]
+
+        result = send_otp(phone)
+
+        if result.get("acknowledge") != "success":
+            return Response(
+                {
+                    "detail": "Failed to send OTP.",
+                    "response": result
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        verification_id = result["response"]["verificationId"]
+
+        return Response(
+            {
+                "message": "OTP sent successfully.",
+                "verificationId": verification_id
+            },
+            status=status.HTTP_200_OK
+        )
+
+class VerifyOTPView(APIView):
+
+    def post(self, request):
+
+        phone = request.data.get("phone")
+        otp = request.data.get("otp")
+        verification_id = request.data.get("verificationId")
+
+        if not phone:
+            return Response(
+                {
+                    "detail": "Phone number is required."
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        if not otp:
+            return Response(
+                {
+                    "detail": "OTP is required."
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        if not verification_id:
+            return Response(
+                {
+                    "detail": "Verification ID is required."
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        result = verify_otp(
+            phone,
+            otp,
+            verification_id
+        )
+
+        if result.get("acknowledge") != "success":
+            return Response(
+                {
+                    "detail": "Invalid or expired OTP.",
+                    "response": result
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        return Response(
+            {
+                "message": "OTP verified successfully."
+            },
+            status=status.HTTP_200_OK
         )

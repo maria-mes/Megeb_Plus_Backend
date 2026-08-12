@@ -9,8 +9,13 @@ https://docs.djangoproject.com/en/6.1/topics/settings/
 For the full list of settings and their values, see
 https://docs.djangoproject.com/en/6.1/ref/settings/
 """
-
+import os
 from pathlib import Path
+from dotenv import load_dotenv
+
+BASE_DIR = Path(__file__).resolve().parent.parent
+
+load_dotenv(BASE_DIR / ".env")
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -25,8 +30,7 @@ SECRET_KEY = 'django-insecure-406_xfm4aex@rt1!g#xy%^om-w01l&wsm9xs49^j@f58ziol^g
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = []
-
+ALLOWED_HOSTS = ["*"]
 
 # Application definition
 
@@ -150,3 +154,6 @@ CORS_ALLOWED_ORIGINS = [
 AUTHENTICATION_BACKENDS = [
     "django.contrib.auth.backends.ModelBackend",
 ]
+
+AFROMESSAGE_IDENTIFIER_ID = os.getenv("AFROMESSAGE_IDENTIFIER_ID")
+AFROMESSAGE_TOKEN = os.getenv("AFROMESSAGE_TOKEN")

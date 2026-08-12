@@ -69,3 +69,59 @@ class User(AbstractBaseUser, PermissionsMixin):
 
     def __str__(self):
         return self.email
+
+class OTPVerification(models.Model):
+
+    PURPOSE_CHOICES = [
+        ("registration", "Registration"),
+        ("login", "Login"),
+        ("password_reset", "Password Reset"),
+    ]
+
+    phone = models.CharField(max_length=20)
+    otp = models.CharField(
+    max_length=6,
+    null=True,
+    blank=True
+)
+
+    verification_id = models.CharField(
+        max_length=255
+    )
+
+    purpose = models.CharField(
+        max_length=30,
+        choices=PURPOSE_CHOICES
+    )
+
+    is_verified = models.BooleanField(
+        default=False
+    )
+
+    created_at = models.DateTimeField(
+        auto_now_add=True
+    )
+
+    verified_at = models.DateTimeField(
+        null=True,
+        blank=True
+    )
+
+    class Meta:
+        indexes = [
+            models.Index(
+                fields=["phone", "purpose"]
+            ),
+        ]
+
+    def __str__(self):
+        return f"{self.phone} - {self.purpose}"
+class PendingRegistration(models.Model):
+    full_name = models.CharField(max_length=255)
+    phone = models.CharField(max_length=20, unique=True)
+    password = models.CharField(max_length=128)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return self.phone
