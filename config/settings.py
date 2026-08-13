@@ -150,3 +150,12 @@ CORS_ALLOWED_ORIGINS = [
 AUTHENTICATION_BACKENDS = [
     "django.contrib.auth.backends.ModelBackend",
 ]
+DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+import os
+from dotenv import load_dotenv
+
+load_dotenv()
+
+AFROSMS_TOKEN = os.getenv("AFROMESSAGE_TOKEN")
+AFROSMS_IDENTIFIER_ID = os.getenv("AFROMESSAGE_IDENTIFIER_ID")

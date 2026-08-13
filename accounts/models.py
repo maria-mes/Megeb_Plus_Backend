@@ -17,8 +17,8 @@ class UserManager(BaseUserManager):
         extra_fields.setdefault("is_active", True)
         return self.create_user(phone, password, **extra_fields)
 
-class User(AbstractBaseUser, PermissionsMixin):
 
+class User(AbstractBaseUser, PermissionsMixin):
     ROLE_CHOICES = [
         ("user", "User"),
         ("nutritionist", "Nutritionist"),
@@ -27,45 +27,46 @@ class User(AbstractBaseUser, PermissionsMixin):
     ]
 
     id = models.BigAutoField(primary_key=True)
-
     full_name = models.CharField(max_length=255)
-
     email = models.EmailField(unique=False, blank=True, null=True)
-
-
-    phone = models.CharField(
-        max_length=20,
-        unique=True,
-        null=True,
-        blank=True
-    )
-
-    role = models.CharField(
-        max_length=20,
-        choices=ROLE_CHOICES,
-        default="user"
-    )
-
-    profile_picture = models.URLField(
-        null=True,
-        blank=True
-    )
-
+    phone = models.CharField(max_length=20, unique=True, null=True, blank=True)
+    role = models.CharField(max_length=20, choices=ROLE_CHOICES, default="user")
+    profile_picture = models.URLField(null=True, blank=True)
     is_verified = models.BooleanField(default=False)
-
-    is_active = models.BooleanField(default=True)
-
+    is_active = models.BooleanField(default=False)
     is_staff = models.BooleanField(default=False)
-
     created_at = models.DateTimeField(auto_now_add=True)
-
     updated_at = models.DateTimeField(auto_now=True)
 
     objects = UserManager()
 
     USERNAME_FIELD = "phone"
-
     REQUIRED_FIELDS = []
 
     def __str__(self):
-        return self.email
+        return self.phone or self.email or str(self.id)
+
+
+class PhoneOTP(models.Model):
+    PURPOSE_REGISTER = "register"
+    PURPOSE_RESET_PASSWORD = "reset_password"
+
+    PURPOSE_CHOICES = [
+        (PURPOSE_REGISTER, "Register"),
+        (PURPOSE_RESET_PASSWORD, "Reset Password"),
+    ]
+
+    phone = models.CharField(max_length=20)
+    otp_code = models.CharField(max_length=6)
+    purpose = models.CharField(max_length=30, choices=PURPOSE_CHOICES, default=PURPOSE_REGISTER)
+    created_at = models.DateTimeField(auto_now_add=True)
+    expires_at = models.DateTimeField()
+    is_used = models.BooleanField(default=False)
+    attempts = models.PositiveIntegerField(default=0)
+
+    def is_valid(self, now=None):
+        from django.utils import timezone
+
+        if now is None:
+            now = timezone.now()
+        return not self.is_used and now < self.expires_at
