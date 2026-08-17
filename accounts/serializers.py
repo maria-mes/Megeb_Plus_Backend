@@ -1,5 +1,6 @@
 from rest_framework import serializers
-from .models import User, PendingRegistration
+from django.contrib.auth.hashers import make_password
+from .models import User, PendingRegistration, StaffApplication
 
 
 class UserSerializer(serializers.ModelSerializer):
@@ -58,6 +59,7 @@ class RegisterSerializer(serializers.ModelSerializer):
 
         return user
 
+
 class PendingRegistrationSerializer(serializers.ModelSerializer):
 
     password = serializers.CharField(
@@ -96,14 +98,117 @@ class PendingRegistrationSerializer(serializers.ModelSerializer):
 
         password = validated_data.pop("password")
 
-        from django.contrib.auth.hashers import make_password
-
         validated_data["password"] = make_password(password)
 
         return PendingRegistration.objects.create(
             **validated_data
         )
-        
-class SendOTPSerializer(serializers.Serializer):
 
+
+class SendOTPSerializer(serializers.Serializer):
     phone = serializers.CharField()
+
+
+# ---------------------------
+# Email flow — user registration (mobile app)
+# ---------------------------
+
+class EmailRegisterSerializer(serializers.ModelSerializer):
+    """Step 1: role=user registers with email. Stages in PendingRegistration."""
+
+    password = serializers.CharField(write_only=True, min_length=8)
+    confirm_password = serializers.CharField(write_only=True)
+
+    class Meta:
+        model = PendingRegistration
+        fields = ["full_name", "email", "password", "confirm_password"]
+
+    def validate(self, data):
+        if data["password"] != data["confirm_password"]:
+            raise serializers.ValidationError({"confirm_password": "Passwords do not match."})
+
+        if User.objects.filter(email=data["email"]).exists():
+            raise serializers.ValidationError({"email": "This email is already registered."})
+
+        PendingRegistration.objects.filter(email=data["email"]).delete()
+
+        return data
+
+    def create(self, validated_data):
+        validated_data.pop("confirm_password")
+        password = validated_data.pop("password")
+        validated_data["password"] = make_password(password)
+        return PendingRegistration.objects.create(**validated_data)
+
+
+class SendEmailOTPSerializer(serializers.Serializer):
+    email = serializers.EmailField()
+    purpose = serializers.ChoiceField(choices=["registration", "password_reset"], default="registration")
+
+
+class VerifyEmailOTPSerializer(serializers.Serializer):
+    email = serializers.EmailField()
+    otp = serializers.CharField()
+    purpose = serializers.ChoiceField(choices=["registration", "password_reset"], default="registration")
+
+
+class ResetPasswordSerializer(serializers.Serializer):
+    email = serializers.EmailField()
+    new_password = serializers.CharField(write_only=True, min_length=8)
+    confirm_new_password = serializers.CharField(write_only=True)
+
+    def validate(self, data):
+        if data["new_password"] != data["confirm_new_password"]:
+            raise serializers.ValidationError({"confirm_new_password": "Passwords do not match."})
+        return data
+
+
+# ---------------------------
+# Staff applications — vendor/nutritionist (website), admin review
+# ---------------------------
+
+class StaffApplicationSerializer(serializers.ModelSerializer):
+    """Vendor/nutritionist submits an application with documents + password."""
+
+    password = serializers.CharField(write_only=True, min_length=8)
+    confirm_password = serializers.CharField(write_only=True)
+
+    class Meta:
+        model = StaffApplication
+        fields = [
+            "full_name", "email", "phone", "role", "password", "confirm_password", "application_data",
+            "license_document", "credential_document", "insurance_document", "degree_document",
+        ]
+
+    def validate(self, data):
+        if data["password"] != data["confirm_password"]:
+            raise serializers.ValidationError({"confirm_password": "Passwords do not match."})
+
+        if data["role"] not in ["nutritionist", "vendor"]:
+            raise serializers.ValidationError({"role": "Role must be nutritionist or vendor."})
+
+        if User.objects.filter(email=data["email"]).exists():
+            raise serializers.ValidationError({"email": "This email is already registered."})
+
+        if StaffApplication.objects.filter(email=data["email"], status="pending").exists():
+            raise serializers.ValidationError({"email": "An application with this email is already pending."})
+
+        return data
+
+    def create(self, validated_data):
+        validated_data.pop("confirm_password")
+        password = validated_data.pop("password")
+        validated_data["password"] = make_password(password)
+        return StaffApplication.objects.create(**validated_data)
+
+
+class StaffApplicationListSerializer(serializers.ModelSerializer):
+    """For admin to view pending applications."""
+
+    class Meta:
+        model = StaffApplication
+        fields = [
+            "id", "full_name", "email", "phone", "role", "application_data",
+            "license_document", "credential_document", "insurance_document", "degree_document",
+            "status", "created_at",
+        ]

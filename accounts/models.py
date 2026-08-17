@@ -3,10 +3,10 @@ from django.db import models
 
 
 class UserManager(BaseUserManager):
-    def create_user(self, phone, password=None, **extra_fields):
-        if not phone:
-            raise ValueError("Phone number is required")
-        user = self.model(phone=phone, **extra_fields)
+    def create_user(self, phone=None, email=None, password=None, **extra_fields):
+        if not phone and not email:
+            raise ValueError("Phone or email is required")
+        user = self.model(phone=phone, email=email, **extra_fields)
         user.set_password(password)
         user.save(using=self._db)
         return user
@@ -15,7 +15,8 @@ class UserManager(BaseUserManager):
         extra_fields.setdefault("is_staff", True)
         extra_fields.setdefault("is_superuser", True)
         extra_fields.setdefault("is_active", True)
-        return self.create_user(phone, password, **extra_fields)
+        return self.create_user(phone=phone, password=password, **extra_fields)
+
 
 class User(AbstractBaseUser, PermissionsMixin):
 
@@ -31,7 +32,6 @@ class User(AbstractBaseUser, PermissionsMixin):
     full_name = models.CharField(max_length=255)
 
     email = models.EmailField(unique=False, blank=True, null=True)
-
 
     phone = models.CharField(
         max_length=20,
@@ -68,9 +68,15 @@ class User(AbstractBaseUser, PermissionsMixin):
     REQUIRED_FIELDS = []
 
     def __str__(self):
-        return self.email
+        return self.email or self.phone or str(self.id)
+
 
 class OTPVerification(models.Model):
+
+    CHANNEL_CHOICES = [
+        ("phone", "Phone"),
+        ("email", "Email"),
+    ]
 
     PURPOSE_CHOICES = [
         ("registration", "Registration"),
@@ -78,15 +84,25 @@ class OTPVerification(models.Model):
         ("password_reset", "Password Reset"),
     ]
 
-    phone = models.CharField(max_length=20)
+    channel = models.CharField(
+        max_length=10,
+        choices=CHANNEL_CHOICES,
+        default="phone"
+    )
+
+    phone = models.CharField(max_length=20, null=True, blank=True)
+    email = models.EmailField(null=True, blank=True)
+
     otp = models.CharField(
-    max_length=6,
-    null=True,
-    blank=True
-)
+        max_length=6,
+        null=True,
+        blank=True
+    )
 
     verification_id = models.CharField(
-        max_length=255
+        max_length=255,
+        null=True,
+        blank=True
     )
 
     purpose = models.CharField(
@@ -109,19 +125,65 @@ class OTPVerification(models.Model):
 
     class Meta:
         indexes = [
-            models.Index(
-                fields=["phone", "purpose"]
-            ),
+            models.Index(fields=["phone", "purpose"]),
+            models.Index(fields=["email", "purpose"]),
         ]
 
     def __str__(self):
-        return f"{self.phone} - {self.purpose}"
+        identifier = self.phone or self.email
+        return f"{identifier} - {self.purpose}"
+
+
 class PendingRegistration(models.Model):
     full_name = models.CharField(max_length=255)
-    phone = models.CharField(max_length=20, unique=True)
+
+    phone = models.CharField(max_length=20, unique=True, null=True, blank=True)
+    email = models.EmailField(unique=True, null=True, blank=True)
+
     password = models.CharField(max_length=128)
 
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
-        return self.phone
+        return self.phone or self.email
+
+
+class StaffApplication(models.Model):
+
+    ROLE_CHOICES = [
+        ("nutritionist", "Nutritionist"),
+        ("vendor", "Vendor"),
+    ]
+
+    STATUS_CHOICES = [
+        ("pending", "Pending"),
+        ("approved", "Approved"),
+        ("rejected", "Rejected"),
+    ]
+
+    full_name = models.CharField(max_length=255)
+    email = models.EmailField(unique=True)
+    phone = models.CharField(max_length=20, null=True, blank=True)
+    password = models.CharField(max_length=128)
+
+    role = models.CharField(max_length=20, choices=ROLE_CHOICES)
+
+    application_data = models.JSONField(default=dict, blank=True)
+    # holds text fields: license number, credential type, insurance
+    # provider, degree, years of experience, specialization, etc.
+
+    license_document = models.FileField(upload_to="applications/licenses/", null=True, blank=True)
+    credential_document = models.FileField(upload_to="applications/credentials/", null=True, blank=True)
+    insurance_document = models.FileField(upload_to="applications/insurance/", null=True, blank=True)
+    degree_document = models.FileField(upload_to="applications/degrees/", null=True, blank=True)
+
+    status = models.CharField(max_length=10, choices=STATUS_CHOICES, default="pending")
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    reviewed_at = models.DateTimeField(null=True, blank=True)
+    reviewed_by = models.ForeignKey(
+        "User", null=True, blank=True, on_delete=models.SET_NULL, related_name="reviewed_applications"
+    )
+
+    def __str__(self):
+        return f"{self.full_name} ({self.role}) - {self.status}"
