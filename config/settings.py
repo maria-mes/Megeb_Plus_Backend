@@ -25,6 +25,7 @@ INSTALLED_APPS = [
     'health',
     'rest_framework_simplejwt',
     'corsheaders',
+    'nutritionists',
 ]
 
 REST_FRAMEWORK = {
