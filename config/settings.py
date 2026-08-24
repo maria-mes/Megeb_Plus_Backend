@@ -26,6 +26,8 @@ INSTALLED_APPS = [
     'rest_framework_simplejwt',
     'corsheaders',
     'nutritionists',
+    'consultations',
+    'admin_panel',
 ]
 
 REST_FRAMEWORK = {

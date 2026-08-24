@@ -21,9 +21,13 @@ from .serializers import (
     ResetPasswordSerializer,
     StaffApplicationSerializer,
     StaffApplicationListSerializer,
+    UpdateProfileSerializer,
+    ChangePasswordSerializer,
 )
 from .services.afromessage import send_otp, verify_otp
 from .services.email_service import generate_otp, send_otp_email, send_registration_confirmation_email
+
+
 class CustomTokenObtainPairSerializer(serializers.Serializer):
     identifier = serializers.CharField()
     password = serializers.CharField(write_only=True)
@@ -32,36 +36,20 @@ class CustomTokenObtainPairSerializer(serializers.Serializer):
         identifier = attrs["identifier"].strip()
         password = attrs["password"]
 
-        # Try email first
-        user = User.objects.filter(
-            email__iexact=identifier
-        ).first()
+        user = User.objects.filter(email__iexact=identifier).first()
 
-        # If no email matched, try phone
         if user is None:
-            user = User.objects.filter(
-                phone=identifier
-            ).first()
+            user = User.objects.filter(phone=identifier).first()
 
-        # No account found
         if user is None:
-            raise serializers.ValidationError({
-                "detail": "Invalid email/phone or password."
-            })
+            raise serializers.ValidationError({"detail": "Invalid email/phone or password."})
 
-        # Check password
         if not user.check_password(password):
-            raise serializers.ValidationError({
-                "detail": "Invalid email/phone or password."
-            })
+            raise serializers.ValidationError({"detail": "Invalid email/phone or password."})
 
-        # Check account status
         if not user.is_active:
-            raise serializers.ValidationError({
-                "detail": "This account is inactive."
-            })
+            raise serializers.ValidationError({"detail": "This account is inactive."})
 
-        # Create JWT
         refresh = RefreshToken.for_user(user)
 
         return {
@@ -72,27 +60,31 @@ class CustomTokenObtainPairSerializer(serializers.Serializer):
             "email": user.email,
             "phone": user.phone,
         }
+
+
 class MeView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        return Response(
-            UserSerializer(request.user).data
-        )
+        return Response(UserSerializer(request.user).data)
+
+    def patch(self, request):
+        serializer = UpdateProfileSerializer(request.user, data=request.data, partial=True)
+
+        if serializer.is_valid():
+            serializer.save()
+            return Response(UserSerializer(request.user).data)
+
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
 class RegisterView(APIView):
 
     def post(self, request):
-
-        serializer = RegisterSerializer(
-            data=request.data
-        )
+        serializer = RegisterSerializer(data=request.data)
 
         if serializer.is_valid():
-
             user = serializer.save()
-
             return Response(
                 {
                     "message": "Registration successful.",
@@ -106,10 +98,7 @@ class RegisterView(APIView):
                 status=status.HTTP_201_CREATED
             )
 
-        return Response(
-            serializer.errors,
-            status=status.HTTP_400_BAD_REQUEST
-        )
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
 class LoginView(APIView):
@@ -118,49 +107,32 @@ class LoginView(APIView):
         serializer = CustomTokenObtainPairSerializer(data=request.data)
 
         if serializer.is_valid():
-            return Response(
-                serializer.validated_data,
-                status=status.HTTP_200_OK
-            )
+            return Response(serializer.validated_data, status=status.HTTP_200_OK)
 
-        return Response(
-            serializer.errors,
-            status=status.HTTP_400_BAD_REQUEST
-        )
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
 class SendOTPView(APIView):
 
     def post(self, request):
-
         serializer = SendOTPSerializer(data=request.data)
 
         if not serializer.is_valid():
-            return Response(
-                serializer.errors,
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
         phone = serializer.validated_data["phone"]
-
         result = send_otp(phone)
 
         if result.get("acknowledge") != "success":
             return Response(
-                {
-                    "detail": "Failed to send OTP.",
-                    "response": result
-                },
+                {"detail": "Failed to send OTP.", "response": result},
                 status=status.HTTP_400_BAD_REQUEST
             )
 
         verification_id = result["response"]["verificationId"]
 
         return Response(
-            {
-                "message": "OTP sent successfully.",
-                "verificationId": verification_id
-            },
+            {"message": "OTP sent successfully.", "verificationId": verification_id},
             status=status.HTTP_200_OK
         )
 
@@ -168,48 +140,28 @@ class SendOTPView(APIView):
 class VerifyOTPView(APIView):
 
     def post(self, request):
-
         phone = request.data.get("phone")
         otp = request.data.get("otp")
         verification_id = request.data.get("verificationId")
 
         if not phone:
-            return Response(
-                {"detail": "Phone number is required."},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({"detail": "Phone number is required."}, status=status.HTTP_400_BAD_REQUEST)
 
         if not otp:
-            return Response(
-                {"detail": "OTP is required."},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({"detail": "OTP is required."}, status=status.HTTP_400_BAD_REQUEST)
 
         if not verification_id:
-            return Response(
-                {"detail": "Verification ID is required."},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({"detail": "Verification ID is required."}, status=status.HTTP_400_BAD_REQUEST)
 
-        result = verify_otp(
-            phone,
-            otp,
-            verification_id
-        )
+        result = verify_otp(phone, otp, verification_id)
 
         if result.get("acknowledge") != "success":
             return Response(
-                {
-                    "detail": "Invalid or expired OTP.",
-                    "response": result
-                },
+                {"detail": "Invalid or expired OTP.", "response": result},
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-        return Response(
-            {"message": "OTP verified successfully."},
-            status=status.HTTP_200_OK
-        )
+        return Response({"message": "OTP verified successfully."}, status=status.HTTP_200_OK)
 
 
 # ---------------------------
@@ -360,6 +312,10 @@ class ResetPasswordView(APIView):
 
 # ---------------------------
 # Staff applications — vendor/nutritionist (website), admin review
+#
+# NOTE: IsAdminRole and _approve_application / _reject_application are
+# imported by admin_panel/views.py (AdminNutritionistDetailView reuses this
+# same approve/reject logic so the two admin surfaces never drift apart).
 # ---------------------------
 
 class IsAdminRole(BasePermission):
@@ -411,6 +367,52 @@ class PendingApplicationsView(APIView):
         return Response(StaffApplicationListSerializer(applications, many=True, context={"request": request}).data)
 
 
+def _approve_application(application, reviewer):
+    """Shared logic: approve -> create User with the password set at application time."""
+    phone_to_use = application.phone
+    if phone_to_use and User.objects.filter(phone=phone_to_use).exists():
+        phone_to_use = None
+
+    user = User(
+        full_name=application.full_name,
+        email=application.email,
+        phone=phone_to_use,
+        role=application.role,
+        is_verified=True,
+        is_active=True,
+    )
+    user.password = application.password  # already hashed
+    user.save()
+
+    application.status = "approved"
+    application.reviewed_at = timezone.now()
+    application.reviewed_by = reviewer
+    application.save()
+
+    send_registration_confirmation_email(user.email, user.full_name, user.role)
+    return user
+
+
+def _reject_application(application, reviewer):
+    """Shared logic: reject -> notify applicant by email."""
+    application.status = "rejected"
+    application.reviewed_at = timezone.now()
+    application.reviewed_by = reviewer
+    application.save()
+
+    send_mail(
+        subject="Megeb+ Application Update",
+        message=(
+            f"Hi {application.full_name},\n\n"
+            f"Thank you for applying to Megeb+ as a {application.role}. "
+            f"After review, we're unable to approve your application at this time."
+        ),
+        from_email=settings.DEFAULT_FROM_EMAIL,
+        recipient_list=[application.email],
+        fail_silently=False,
+    )
+
+
 class ApproveApplicationView(APIView):
     """Admin-only: approve -> create User with the password they set at application time."""
 
@@ -422,29 +424,11 @@ class ApproveApplicationView(APIView):
         if not application:
             return Response({"detail": "Application not found or already reviewed."}, status=status.HTTP_404_NOT_FOUND)
 
-        phone_to_use = application.phone
-        if phone_to_use and User.objects.filter(phone=phone_to_use).exists():
-            phone_to_use = None
-
-        user = User(
-            full_name=application.full_name,
-            email=application.email,
-            phone=phone_to_use,
-            role=application.role,
-            is_verified=True,
-            is_active=True,
-        )
-        user.password = application.password  # already hashed
-        user.save()
-
-        application.status = "approved"
-        application.reviewed_at = timezone.now()
-        application.reviewed_by = request.user
-        application.save()
-
-        send_registration_confirmation_email(user.email, user.full_name, user.role)
+        _approve_application(application, request.user)
 
         return Response({"message": f"{application.role} approved and account created."}, status=status.HTTP_200_OK)
+
+
 class RejectApplicationView(APIView):
     """Admin-only: reject -> notify applicant by email."""
 
@@ -456,21 +440,32 @@ class RejectApplicationView(APIView):
         if not application:
             return Response({"detail": "Application not found or already reviewed."}, status=status.HTTP_404_NOT_FOUND)
 
-        application.status = "rejected"
-        application.reviewed_at = timezone.now()
-        application.reviewed_by = request.user
-        application.save()
-
-        send_mail(
-            subject="Megeb+ Application Update",
-            message=(
-                f"Hi {application.full_name},\n\n"
-                f"Thank you for applying to Megeb+ as a {application.role}. "
-                f"After review, we're unable to approve your application at this time."
-            ),
-            from_email=settings.DEFAULT_FROM_EMAIL,
-            recipient_list=[application.email],
-            fail_silently=False,
-        )
+        _reject_application(application, request.user)
 
         return Response({"message": "Application rejected and applicant notified."}, status=status.HTTP_200_OK)
+
+
+# ---------------------------
+# Self-service profile & password management
+# ---------------------------
+
+class ChangePasswordView(APIView):
+    """Authenticated user changes their own password (must know current password)."""
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        serializer = ChangePasswordSerializer(data=request.data)
+
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+        user = request.user
+
+        if not user.check_password(serializer.validated_data["current_password"]):
+            return Response({"detail": "Current password is incorrect."}, status=status.HTTP_400_BAD_REQUEST)
+
+        user.set_password(serializer.validated_data["new_password"])
+        user.save()
+
+        return Response({"message": "Password changed successfully."})

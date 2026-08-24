@@ -212,3 +212,34 @@ class StaffApplicationListSerializer(serializers.ModelSerializer):
             "license_document", "credential_document", "insurance_document", "degree_document",
             "status", "created_at",
         ]
+
+# ---------------------------
+# Self-service profile & password management
+# ---------------------------
+
+class UpdateProfileSerializer(serializers.ModelSerializer):
+    """
+    Lets a logged-in user update their own basic profile fields.
+    Email is deliberately excluded — it's the login identifier (USERNAME_FIELD),
+    so changing it needs its own OTP-verified flow, not a plain field edit.
+    """
+
+    class Meta:
+        model = User
+        fields = ["full_name", "phone", "profile_picture"]
+
+    def validate_phone(self, value):
+        if value and User.objects.exclude(id=self.instance.id).filter(phone=value).exists():
+            raise serializers.ValidationError("This phone number is already in use.")
+        return value
+
+
+class ChangePasswordSerializer(serializers.Serializer):
+    current_password = serializers.CharField(write_only=True)
+    new_password = serializers.CharField(write_only=True, min_length=8)
+    confirm_new_password = serializers.CharField(write_only=True)
+
+    def validate(self, data):
+        if data["new_password"] != data["confirm_new_password"]:
+            raise serializers.ValidationError({"confirm_new_password": "Passwords do not match."})
+        return data

@@ -31,4 +31,57 @@ class Migration(migrations.Migration):
                 ('user', models.OneToOneField(on_delete=django.db.models.deletion.CASCADE, related_name='health_profile', to=settings.AUTH_USER_MODEL)),
             ],
         ),
+        migrations.CreateModel(
+            name='WeightLog',
+            fields=[
+                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
+                ('weight_kg', models.DecimalField(decimal_places=2, max_digits=6)),
+                ('logged_at', models.DateTimeField(auto_now_add=True)),
+                ('user', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='weight_logs', to=settings.AUTH_USER_MODEL)),
+            ],
+            options={
+                'ordering': ['-logged_at'],
+            },
+        ),
+        migrations.CreateModel(
+            name='WaterLog',
+            fields=[
+                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
+                ('amount_ml', models.PositiveIntegerField()),
+                ('logged_at', models.DateTimeField(auto_now_add=True)),
+                ('user', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='water_logs', to=settings.AUTH_USER_MODEL)),
+            ],
+            options={
+                'ordering': ['-logged_at'],
+            },
+        ),
+        migrations.CreateModel(
+            name='NutritionGoal',
+            fields=[
+                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
+                ('goal_type', models.CharField(choices=[('lose_weight', 'Lose Weight'), ('gain_weight', 'Gain Weight'), ('maintain_weight', 'Maintain Weight'), ('build_muscle', 'Build Muscle'), ('improve_health', 'Improve Health')], max_length=30)),
+                ('target_weight_kg', models.DecimalField(blank=True, decimal_places=2, max_digits=6, null=True)),
+                ('target_date', models.DateField(blank=True, null=True)),
+                ('status', models.CharField(choices=[('active', 'Active'), ('completed', 'Completed'), ('abandoned', 'Abandoned')], default='active', max_length=20)),
+                ('created_at', models.DateTimeField(auto_now_add=True)),
+                ('user', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='nutrition_goals', to=settings.AUTH_USER_MODEL)),
+            ],
+            options={
+                'ordering': ['-created_at'],
+            },
+        ),
+        migrations.CreateModel(
+            name='ExerciseLog',
+            fields=[
+                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
+                ('activity_type', models.CharField(max_length=100)),
+                ('duration_minutes', models.PositiveIntegerField()),
+                ('calories_burned', models.DecimalField(blank=True, decimal_places=2, max_digits=8, null=True)),
+                ('logged_at', models.DateTimeField(auto_now_add=True)),
+                ('user', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='exercise_logs', to=settings.AUTH_USER_MODEL)),
+            ],
+            options={
+                'ordering': ['-logged_at'],
+            },
+        ),
     ]
