@@ -14,4 +14,7 @@ urlpatterns = [
     include("nutritionists.urls")
 ),
     path("api/auth/", include("accounts.urls")),
+    path("api/health/", include("health.urls")),
+    path("api/consultations/", include("consultations.urls")),
+    path("api/auth/admin/", include("admin_panel.urls")),
 ] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
