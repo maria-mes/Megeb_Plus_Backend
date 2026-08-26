@@ -16,18 +16,48 @@ class NutritionistApplicationSerializer(
         fields = [
             "id",
             "user",
+
+            # Personal information
             "full_name",
             "email",
             "phone",
+
+            # Professional information
             "current_role",
             "specialization",
-            "qualification",
             "years_of_experience",
+
+            # State license
             "license_number",
+            "license_jurisdiction",
+            "license_expiration_date",
+            "license_document",
+
+            # National credential
+            "credential_type",
+            "credential_number",
             "credential_document",
+
+            # Insurance
+            "insurance_provider",
+            "policy_number",
+            "insurance_expiration_date",
+            "coverage_limit",
+            "insurance_document",
+
+            # Degree
+            "degree",
+            "institution",
+            "field_of_study",
+            "graduation_year",
+            "degree_document",
+
+            # AI verification
             "ai_status",
             "ai_score",
             "ai_result",
+
+            # Application status
             "status",
             "rejection_reason",
             "submitted_at",
@@ -38,17 +68,19 @@ class NutritionistApplicationSerializer(
         read_only_fields = [
             "id",
             "user",
+
+            # AI fields are controlled by backend
             "ai_status",
             "ai_score",
             "ai_result",
+
+            # Application status is controlled by backend/admin
             "status",
             "rejection_reason",
             "submitted_at",
             "reviewed_at",
             "updated_at",
         ]
-
-
 class NutritionistProfileSerializer(
     serializers.ModelSerializer
 ):
