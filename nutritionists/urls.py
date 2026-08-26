@@ -6,6 +6,7 @@ from .views import (
     NutritionistApplicationReviewView,
     NutritionistProfileView,
 )
+from .views import NutritionistApplicationAIVerifyView
 
 
 urlpatterns = [
@@ -32,5 +33,10 @@ urlpatterns = [
         "profile/",
         NutritionistProfileView.as_view(),
         name="nutritionist-profile",
+    ),
+    path(
+        "applications/<int:application_id>/ai-verify/",
+        NutritionistApplicationAIVerifyView.as_view(),
+        name="application-ai-verify",
     ),
 ]

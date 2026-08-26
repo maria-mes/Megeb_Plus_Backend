@@ -113,20 +113,12 @@ class RegisterView(APIView):
 
 
 class LoginView(APIView):
-
     def post(self, request):
-        serializer = CustomTokenObtainPairSerializer(data=request.data)
-
+        serializer = LoginSerializer(data=request.data)
         if serializer.is_valid():
-            return Response(
-                serializer.validated_data,
-                status=status.HTTP_200_OK
-            )
+            return Response(serializer.validated_data, status=status.HTTP_200_OK)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-        return Response(
-            serializer.errors,
-            status=status.HTTP_400_BAD_REQUEST
-        )
 
 
 class SendOTPView(APIView):

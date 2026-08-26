@@ -1,7 +1,10 @@
 from rest_framework import serializers
 from django.contrib.auth.hashers import make_password
 from .models import User, PendingRegistration, StaffApplication
-
+from django.contrib.auth import authenticate
+from django.db.models import Q
+from rest_framework_simplejwt.tokens import RefreshToken
+from .models import User
 
 class UserSerializer(serializers.ModelSerializer):
     class Meta:
@@ -212,3 +215,4 @@ class StaffApplicationListSerializer(serializers.ModelSerializer):
             "license_document", "credential_document", "insurance_document", "degree_document",
             "status", "created_at",
         ]
+

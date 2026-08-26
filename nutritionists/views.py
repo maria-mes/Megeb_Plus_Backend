@@ -1,26 +1,27 @@
 from django.utils import timezone
-
+from rest_framework.parsers import FormParser, MultiPartParser
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated, IsAdminUser
 from rest_framework.response import Response
 from rest_framework.views import APIView
-
+from .verification import verify_application
 from .models import (
     NutritionistApplication,
     NutritionistProfile,
 )
-
+from rest_framework import status as http_status
+from django.shortcuts import get_object_or_404
 from .serializers import (
     NutritionistApplicationSerializer,
     NutritionistProfileSerializer,
 )
 
-from .license_verification import verify_license
 
 
 class NutritionistApplicationCreateView(APIView):
 
     permission_classes = [IsAuthenticated]
+    parser_classes = (MultiPartParser, FormParser)
 
     def post(self, request):
 
@@ -50,40 +51,30 @@ class NutritionistApplicationCreateView(APIView):
         application = serializer.save(
             user=request.user
         )
-
+        verify_application(application)  
         # Run initial license verification
-        verification = verify_license(
-            application.license_number,
-            application.credential_document
-        )
+       
 
-        application.ai_status = verification["status"]
+class NutritionistApplicationAIVerifyView(APIView):
+    """POST /api/nutritionists/applications/<id>/ai-verify/
+    Re-runs the AI verification engine and returns the result."""
+    permission_classes = [IsAdminUser]   # or your own admin/staff permission
 
-        application.ai_score = verification["confidence"]
-
-        application.ai_result = verification
-
-        application.save(
-            update_fields=[
-                "ai_status",
-                "ai_score",
-                "ai_result",
-                "updated_at",
-            ]
-        )
-
+    def post(self, request, application_id):
+        application = get_object_or_404(NutritionistApplication, pk=application_id)
+        result = verify_application(application)
         return Response(
             {
-                "message": (
-                    "Nutritionist application submitted successfully."
-                ),
-                "application": NutritionistApplicationSerializer(
-                    application
-                ).data,
-                "verification": verification,
+                "application_id": application.id,
+                "ai_status": application.ai_status,
+                "ai_score": application.ai_score,
+                "ai_result": result,
             },
-            status=status.HTTP_201_CREATED
+            status=http_status.HTTP_200_OK,
         )
+        
+
+    
 
 
 class MyNutritionistApplicationView(APIView):
@@ -181,7 +172,7 @@ class NutritionistApplicationReviewView(APIView):
             user=application.user,
             defaults={
                 "specialization": application.specialization,
-                "qualification": application.qualification,
+                "qualification": application.degree,
                 "years_of_experience": application.years_of_experience,
                 "license_number": application.license_number,
                 "is_verified": True,
@@ -191,7 +182,7 @@ class NutritionistApplicationReviewView(APIView):
         if not created:
 
             profile.specialization = application.specialization
-            profile.qualification = application.qualification
+            profile.qualification = application.degree
             profile.years_of_experience = (
                 application.years_of_experience
             )
