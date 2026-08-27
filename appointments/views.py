@@ -3,33 +3,10 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from django.utils import timezone
-from .models import Appointment, Consultation ,NutritionistAvailability
-from .serializers import AppointmentSerializer,ConsultationSerializer , NutritionistAvailabilitySerializer
-import uuid 
-
-class AppointmentCreateView(APIView):
-
-    permission_classes = [IsAuthenticated]
-
-    def post(self, request):
-
-        serializer = AppointmentSerializer(
-            data=request.data
-        )
-
-        if serializer.is_valid():
-
-            appointment = serializer.save()
-
-            return Response(
-                AppointmentSerializer(appointment).data,
-                status=status.HTTP_201_CREATED
-            )
-
-        return Response(
-            serializer.errors,
-            status=status.HTTP_400_BAD_REQUEST
-        )
+from .models import Appointment, Consultation, NutritionistAvailability
+from .serializers import AppointmentSerializer, ConsultationSerializer, NutritionistAvailabilitySerializer
+import uuid
+from chat.models import Conversation
 
 class NutritionistAppointmentListView(APIView):
 
@@ -65,6 +42,33 @@ class ClientAppointmentListView(APIView):
         )
 
         return Response(serializer.data)
+class AppointmentCreateView(APIView):
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+
+        serializer = AppointmentSerializer(
+            data=request.data
+        )
+
+        if serializer.is_valid():
+
+            appointment = serializer.save()
+            Conversation.objects.get_or_create(
+            client=appointment.client,
+            nutritionist=appointment.nutritionist,
+            
+)
+            return Response(
+                AppointmentSerializer(appointment).data,
+                status=status.HTTP_201_CREATED
+            )
+
+        return Response(
+            serializer.errors,
+            status=status.HTTP_400_BAD_REQUEST
+        )
 class ConfirmAppointmentView(APIView):
 
     permission_classes = [IsAuthenticated]
@@ -244,7 +248,6 @@ class CreateConsultationView(APIView):
             ).data,
             status=status.HTTP_201_CREATED
         )
-        
 class StartConsultationView(APIView):
 
     permission_classes = [IsAuthenticated]
@@ -311,7 +314,6 @@ class StartConsultationView(APIView):
             ConsultationSerializer(consultation).data,
             status=status.HTTP_200_OK
         )
-        
 class EndConsultationView(APIView):
 
     permission_classes = [IsAuthenticated]

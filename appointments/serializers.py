@@ -1,8 +1,5 @@
 from rest_framework import serializers
-
 from .models import NutritionistAvailability
-
-from django.utils import timezone
 from .models import Appointment, Consultation
 from nutritionists.models import NutritionistProfile
 
@@ -49,8 +46,7 @@ class AppointmentSerializer(serializers.ModelSerializer):
     def validate(self, attrs):
 
         nutritionist = attrs.get("nutritionist")
-        date = attrs.get("date")
-        time = attrs.get("time")
+
         # Make sure the selected user is actually
         # an approved/verified nutritionist.
         try:
@@ -64,36 +60,43 @@ class AppointmentSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError({
                 "nutritionist": "This nutritionist is not verified."
             })
-        if Appointment.objects.filter(
-            nutritionist=nutritionist, date=date, time=time, status__in=["pending","confirmed"]
-        ).exists():
-            raise serializers.ValidationError({
-                "time": "This nutritionist already has an appointment at that date and time."
-            })
-        if self.context["request"].user != attrs.get("client"):
-         raise serializers.ValidationError({
-        "client": "You can only book appointments for yourself."
-    })
-
-        # ✅ Check availability slots
-        availability = NutritionistAvailability.objects.filter(
-            nutritionist=nutritionist,
-            day_of_week=date.weekday(),
-            start_time__lte=time,
-            end_time__gte=time,
-            is_active=True
-        ).exists()
-        if not availability:
-            raise serializers.ValidationError({
-                "time": "This nutritionist is not available at the requested date/time."
-            })
-        if date < timezone.now().date():
-         raise serializers.ValidationError({
-        "date": "Cannot book an appointment in the past."
-    })
 
         return attrs
-    
+class ConsultationSerializer(serializers.ModelSerializer):
+
+    appointment_id = serializers.IntegerField(
+        source="appointment.id",
+        read_only=True
+    )
+
+    class Meta:
+        model = Consultation
+
+        fields = [
+            "id",
+            "appointment_id",
+            "status",
+            "room_id",
+            "meeting_url",
+            "started_at",
+            "ended_at",
+            "nutritionist_notes",
+            "client_notes",
+            "created_at",
+            "updated_at",
+        ]
+
+        read_only_fields = [
+            "id",
+            "appointment_id",
+            "status",
+            "room_id",
+            "meeting_url",
+            "started_at",
+            "ended_at",
+            "created_at",
+            "updated_at",
+        ]
 
 class NutritionistAvailabilitySerializer(serializers.ModelSerializer):
 
@@ -135,39 +138,3 @@ class NutritionistAvailabilitySerializer(serializers.ModelSerializer):
             )
 
         return data
-    
-class ConsultationSerializer(serializers.ModelSerializer):
-
-    appointment_id = serializers.IntegerField(
-        source="appointment.id",
-        read_only=True
-    )
-
-    class Meta:
-        model = Consultation
-
-        fields = [
-            "id",
-            "appointment_id",
-            "status",
-            "room_id",
-            "meeting_url",
-            "started_at",
-            "ended_at",
-            "nutritionist_notes",
-            "client_notes",
-            "created_at",
-            "updated_at",
-        ]
-
-        read_only_fields = [
-            "id",
-            "appointment_id",
-            "status",
-            "room_id",
-            "meeting_url",
-            "started_at",
-            "ended_at",
-            "created_at",
-            "updated_at",
-        ]

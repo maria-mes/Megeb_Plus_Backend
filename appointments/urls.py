@@ -8,7 +8,6 @@ from .views import (
     CancelAppointmentView,
     CreateConsultationView,
     StartConsultationView,
-    EndConsultationView,
     NutritionistAvailabilityView,
     NutritionistAvailabilityDetailView,
 )
@@ -20,6 +19,27 @@ urlpatterns = [
         NutritionistAppointmentListView.as_view(),
         name="nutritionist-appointments",
     ),
+    path(
+    "availability/",
+    NutritionistAvailabilityView.as_view(),
+    name="nutritionist-availability",
+),
+
+path(
+    "availability/<int:availability_id>/",
+    NutritionistAvailabilityDetailView.as_view(),
+    name="nutritionist-availability-detail",
+),
+    path(
+    "consultations/<int:consultation_id>/start/",
+    StartConsultationView.as_view(),
+    name="start-consultation",
+),
+    path(
+    "<int:appointment_id>/consultation/",
+    CreateConsultationView.as_view(),
+    name="create-consultation",
+),
 
     path(
         "client/",
@@ -40,31 +60,5 @@ urlpatterns = [
     "<int:appointment_id>/cancel/",
     CancelAppointmentView.as_view(),
     name="appointment-cancel",
-),
-    path(
-    "<int:appointment_id>/consultation/",
-    CreateConsultationView.as_view(),
-    name="create-consultation",
-),
-    path(
-    "consultations/<int:consultation_id>/start/",
-    StartConsultationView.as_view(),
-    name="start-consultation",
-),
-    path(
-    "consultations/<int:consultation_id>/end/",
-    EndConsultationView.as_view(),
-    name="end-consultation",
-),
-    path(
-    "availability/",
-    NutritionistAvailabilityView.as_view(),
-    name="nutritionist-availability",
-),
-
-path(
-    "availability/<int:availability_id>/",
-    NutritionistAvailabilityDetailView.as_view(),
-    name="nutritionist-availability-detail",
 ),
 ]

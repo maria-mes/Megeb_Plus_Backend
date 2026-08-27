@@ -13,6 +13,10 @@ urlpatterns = [
     "api/nutritionists/",
     include("nutritionists.urls")
 ),
+    path(
+    "api/chat/",
+    include("chat.urls")
+),
     path("api/auth/", include("accounts.urls")),
     path("api/health/", include("health.urls")),
     path("api/auth/admin/", include("admin_panel.urls")),
