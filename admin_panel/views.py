@@ -9,7 +9,7 @@ from datetime import timedelta
 
 from accounts.models import User, StaffApplication
 from accounts.views import _approve_application, _reject_application
-from consultations.models import Appointment
+from appointments.models import Appointment
 
 from .permissions import IsAdminRole
 from .models import PlatformSettings

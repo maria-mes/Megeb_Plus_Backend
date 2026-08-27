@@ -1,6 +1,6 @@
 from rest_framework import serializers
 from accounts.models import User, StaffApplication
-from consultations.models import Appointment
+from appointments.models import Appointment
 from .models import PlatformSettings
 
 

@@ -27,6 +27,7 @@ INSTALLED_APPS = [
     'corsheaders',
     'nutritionists',
     'appointments',
+    'admin_panel'
 ]
 
 REST_FRAMEWORK = {

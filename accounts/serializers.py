@@ -61,7 +61,33 @@ class RegisterSerializer(serializers.ModelSerializer):
         )
 
         return user
+class LoginSerializer(serializers.Serializer):
+    identifier = serializers.CharField()
+    password = serializers.CharField(write_only=True)
 
+    def validate(self, attrs):
+        identifier = attrs.get("identifier")
+        password = attrs.get("password")
+
+        # Find user by email OR phone
+        user = User.objects.filter(Q(email=identifier) | Q(phone=identifier)).first()
+
+        if not user or not user.check_password(password):
+            raise serializers.ValidationError({"detail": "Invalid credentials."})
+
+        if not user.is_active:
+            raise serializers.ValidationError({"detail": "This account is inactive."})
+
+        # Generate JWT tokens
+        refresh = RefreshToken.for_user(user)
+        return {
+            "refresh": str(refresh),
+            "access": str(refresh.access_token),
+            "role": user.role,
+            "full_name": user.full_name,
+            "email": user.email,
+            "phone": user.phone,
+        }
 
 class PendingRegistrationSerializer(serializers.ModelSerializer):
 
