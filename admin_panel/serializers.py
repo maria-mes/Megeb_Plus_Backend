@@ -52,8 +52,8 @@ class AdminNutritionistSerializer(serializers.ModelSerializer):
 
 
 class AdminAppointmentSerializer(serializers.ModelSerializer):
-    client = serializers.CharField(source="user.full_name")
-    nutritionist = serializers.CharField(source="slot.nutritionist.full_name")
+    client = serializers.CharField(source="client.full_name")
+    nutritionist = serializers.CharField(source="nutritionist.full_name")
     date = serializers.SerializerMethodField()
     time = serializers.SerializerMethodField()
     status = serializers.SerializerMethodField()
@@ -63,10 +63,10 @@ class AdminAppointmentSerializer(serializers.ModelSerializer):
         fields = ["id", "client", "nutritionist", "date", "time", "status"]
 
     def get_date(self, obj):
-        return obj.slot.date.strftime("%Y-%m-%d")
+        return obj.date.strftime("%Y-%m-%d")
 
     def get_time(self, obj):
-        return obj.slot.start_time.strftime("%I:%M %p").lstrip("0")
+        return obj.time.strftime("%I:%M %p").lstrip("0")
 
     def get_status(self, obj):
         # Frontend's AppointmentStatus type only has 3 states (no "completed"),
