@@ -1,5 +1,6 @@
 # models.py
 from django.db import models
+from django.utils import timezone
 from accounts.models import User
 
 
@@ -106,6 +107,17 @@ class HealthProfile(models.Model):
         help_text="From health-goals screen"
     )
 
+    # --- Calculated nutrition targets ---
+    # Auto-computed server-side (see health/utils.py) whenever the profile
+    # has enough data — mirrors calculateAndSaveNutritionGoals() on mobile.
+    # Never set these directly from client input.
+    calorie_target = models.PositiveIntegerField(null=True, blank=True)
+    protein_target_g = models.PositiveIntegerField(null=True, blank=True)
+    carbs_target_g = models.PositiveIntegerField(null=True, blank=True)
+    fat_target_g = models.PositiveIntegerField(null=True, blank=True)
+    water_target_glasses = models.PositiveIntegerField(null=True, blank=True)
+    water_glass_size_ml = models.PositiveIntegerField(default=250)
+
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -120,13 +132,26 @@ class WeightLog(models.Model):
         related_name="weight_logs"
     )
     weight_kg = models.DecimalField(max_digits=6, decimal_places=2)
+
+    # The calendar day this weight applies to. Distinct from logged_at
+    # (server timestamp) so a user can log for "today" specifically and
+    # re-logging the same day updates the existing entry rather than
+    # creating a duplicate — see WeightLogViewSet.create().
+    date = models.DateField(default=timezone.localdate)
+
     logged_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
-        ordering = ['-logged_at']
+        ordering = ['-date']
+        constraints = [
+            models.UniqueConstraint(
+                fields=['user', 'date'],
+                name='unique_weight_log_per_user_per_date'
+            )
+        ]
 
     def __str__(self):
-        return f"{self.user.email} - {self.weight_kg}kg @ {self.logged_at}"
+        return f"{self.user.email} - {self.weight_kg}kg @ {self.date}"
 
 
 class NutritionGoal(models.Model):
@@ -179,18 +204,105 @@ class WaterLog(models.Model):
 
 
 class ExerciseLog(models.Model):
+    INTENSITY_CHOICES = [
+        ('low', 'Low'),
+        ('moderate', 'Moderate'),
+        ('high', 'High'),
+    ]
+
     user = models.ForeignKey(
         User,
         on_delete=models.CASCADE,
         related_name="exercise_logs"
     )
     activity_type = models.CharField(max_length=100)
+    intensity = models.CharField(
+        max_length=10,
+        choices=INTENSITY_CHOICES,
+        default='moderate'
+    )
     duration_minutes = models.PositiveIntegerField()
+
+    # Always server-calculated from duration_minutes + intensity
+    # (see CALORIES_PER_MINUTE in views.py) — never trust a client value.
     calories_burned = models.DecimalField(max_digits=8, decimal_places=2, null=True, blank=True)
+
+    # The day this activity is logged against — lets a user log for
+    # today or a recent past day, distinct from logged_at (server timestamp).
+    date = models.DateField(default=timezone.localdate)
+
     logged_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
-        ordering = ['-logged_at']
+        ordering = ['-date', '-logged_at']
 
     def __str__(self):
-        return f"{self.user.email} - {self.activity_type} ({self.duration_minutes} min)"
+        return f"{self.user.email} - {self.activity_type} ({self.duration_minutes} min) @ {self.date}"
+
+
+class Food(models.Model):
+    name = models.CharField(max_length=150)
+    category = models.CharField(max_length=100, null=True, blank=True)
+
+    calories_per_100g = models.DecimalField(max_digits=7, decimal_places=2)
+    protein_g = models.DecimalField(max_digits=6, decimal_places=2)
+    carbs_g = models.DecimalField(max_digits=6, decimal_places=2)
+    fat_g = models.DecimalField(max_digits=6, decimal_places=2)
+    fiber_g = models.DecimalField(max_digits=6, decimal_places=2, default=0)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['name']
+
+    def __str__(self):
+        return self.name
+
+
+class FoodEntry(models.Model):
+    MEAL_TYPE_CHOICES = [
+        ('breakfast', 'Breakfast'),
+        ('lunch', 'Lunch'),
+        ('dinner', 'Dinner'),
+        ('snacks', 'Snacks'),
+    ]
+
+    user = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name="food_entries"
+    )
+
+    # Nullable: lets an entry survive even if the underlying Food
+    # is later edited/removed, and supports future "custom food" entries
+    # that aren't tied to a catalog row.
+    food = models.ForeignKey(
+        Food,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="entries"
+    )
+
+    food_name = models.CharField(max_length=150)
+    meal_type = models.CharField(max_length=20, choices=MEAL_TYPE_CHOICES)
+    date = models.DateField()
+
+    portion_label = models.CharField(max_length=100, blank=True)
+    grams = models.DecimalField(max_digits=7, decimal_places=2)
+
+    # Snapshot of nutrition at the time of logging (grams * food ratios),
+    # so historical entries never change if the Food catalog is edited later.
+    calories = models.DecimalField(max_digits=7, decimal_places=2)
+    protein_g = models.DecimalField(max_digits=6, decimal_places=2)
+    carbs_g = models.DecimalField(max_digits=6, decimal_places=2)
+    fat_g = models.DecimalField(max_digits=6, decimal_places=2)
+    fiber_g = models.DecimalField(max_digits=6, decimal_places=2, default=0)
+
+    logged_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-date', 'logged_at']
+
+    def __str__(self):
+        return f"{self.user.email} - {self.food_name} ({self.meal_type}) @ {self.date}"
