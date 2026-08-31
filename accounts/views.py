@@ -9,6 +9,7 @@ from django.utils import timezone
 from django.core.mail import send_mail
 from django.conf import settings
 from datetime import timedelta
+from rest_framework_simplejwt.views import TokenObtainPairView
 
 from .models import User, OTPVerification, PendingRegistration, StaffApplication
 from .serializers import (
@@ -24,6 +25,7 @@ from .serializers import (
     StaffApplicationListSerializer,
     UpdateProfileSerializer,
     ChangePasswordSerializer,
+    CustomTokenObtainPairSerializer
 )
 from .services.afromessage import send_otp, verify_otp
 from .services.email_service import generate_otp, send_otp_email, send_registration_confirmation_email
@@ -52,6 +54,13 @@ class CustomTokenObtainPairSerializer(serializers.Serializer):
             raise serializers.ValidationError({"detail": "This account is inactive."})
 
         refresh = RefreshToken.for_user(user)
+        access_token = refresh.access_token
+
+        # ✅ Add custom claims directly to the token
+        access_token["role"] = user.role
+        access_token["email"] = user.email
+        access_token["phone"] = user.phone
+        access_token["full_name"] = user.full_name
 
         return {
             "refresh": str(refresh),
@@ -62,7 +71,9 @@ class CustomTokenObtainPairSerializer(serializers.Serializer):
             "phone": user.phone,
         }
 
-
+class CustomTokenObtainPairView(TokenObtainPairView):
+    serializer_class = CustomTokenObtainPairSerializer
+    
 class MeView(APIView):
     permission_classes = [IsAuthenticated]
 

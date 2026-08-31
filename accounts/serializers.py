@@ -3,8 +3,9 @@ from django.contrib.auth.hashers import make_password
 from .models import User, PendingRegistration, StaffApplication
 from django.contrib.auth import authenticate
 from django.db.models import Q
-from rest_framework_simplejwt.tokens import RefreshToken
+from rest_framework_simplejwt.serializers import RefreshToken, TokenObtainPairSerializer 
 from .models import User
+
 
 class UserSerializer(serializers.ModelSerializer):
     class Meta:
@@ -30,12 +31,15 @@ class RegisterSerializer(serializers.ModelSerializer):
     confirm_password = serializers.CharField(
         write_only=True
     )
+    email = serializers.EmailField(required=False, allow_null=True)
+    phone = serializers.CharField(required=False, allow_null=True)
 
     class Meta:
         model = User
         fields = [
             "full_name",
             "phone",
+            "email",
             "password",
             "confirm_password"
         ]
@@ -46,8 +50,23 @@ class RegisterSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError({
                 "confirm_password": "Passwords do not match."
             })
+        if not data.get("phone") and not data.get("email"):
+            raise serializers.ValidationError({"detail": "Either phone or email is required."})
 
         return data
+
+    def create(self, validated_data):
+
+        validated_data.pop("confirm_password")
+
+        password = validated_data.pop("password")
+
+        user = User.objects.create_user(
+            password=password,
+            **validated_data
+        )
+
+        return user
 
     def create(self, validated_data):
 
@@ -71,7 +90,7 @@ class LoginSerializer(serializers.Serializer):
 
         # Find user by email OR phone
         user = User.objects.filter(Q(email=identifier) | Q(phone=identifier)).first()
-
+        
         if not user or not user.check_password(password):
             raise serializers.ValidationError({"detail": "Invalid credentials."})
 
@@ -88,6 +107,25 @@ class LoginSerializer(serializers.Serializer):
             "email": user.email,
             "phone": user.phone,
         }
+
+class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
+    def validate(self, attrs):
+        data = super().validate(attrs)
+        # Add extra claims to the response body
+        data['user_id'] = self.user.id
+        data['role'] = self.user.role
+        data['email'] = self.user.email
+        data['phone'] = self.user.phone
+        return data
+
+    @classmethod
+    def get_token(cls, user):
+        token = super().get_token(user)
+        # Add extra claims inside the JWT payload itself
+        token['role'] = user.role
+        token['email'] = user.email
+        token['phone'] = user.phone
+        return token
 
 class PendingRegistrationSerializer(serializers.ModelSerializer):
 
