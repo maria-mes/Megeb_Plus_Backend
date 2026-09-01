@@ -306,31 +306,3 @@ class FoodEntry(models.Model):
 
     def __str__(self):
         return f"{self.user.email} - {self.food_name} ({self.meal_type}) @ {self.date}"
-
-
-class AISuggestion(models.Model):
-    """
-    A cached, LLM-generated tip for a user's dashboard.
-    One per user per day — see health/ai.py for generation logic
-    and AISuggestionView for the cache/refresh behavior.
-    """
-    user = models.ForeignKey(
-        User,
-        on_delete=models.CASCADE,
-        related_name="ai_suggestions"
-    )
-    date = models.DateField(default=timezone.localdate)
-    message = models.TextField()
-    created_at = models.DateTimeField(auto_now_add=True)
-
-    class Meta:
-        ordering = ['-date']
-        constraints = [
-            models.UniqueConstraint(
-                fields=['user', 'date'],
-                name='unique_ai_suggestion_per_user_per_date'
-            )
-        ]
-
-    def __str__(self):
-        return f"{self.user.email} - AI suggestion @ {self.date}"

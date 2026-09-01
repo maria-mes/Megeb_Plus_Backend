@@ -1,7 +1,7 @@
 from rest_framework import serializers
 from .models import (
     HealthProfile, WeightLog, NutritionGoal, WaterLog, ExerciseLog,
-    Food, FoodEntry, AISuggestion,
+    Food, FoodEntry,
 )
 
 
@@ -87,10 +87,3 @@ class FoodEntrySerializer(serializers.ModelSerializer):
         if food and not attrs.get('food_name'):
             attrs['food_name'] = food.name
         return attrs
-
-
-class AISuggestionSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = AISuggestion
-        fields = ['id', 'message', 'date', 'created_at']
-        read_only_fields = fields
