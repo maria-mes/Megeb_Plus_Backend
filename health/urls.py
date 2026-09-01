@@ -1,8 +1,10 @@
+from django.urls import path
 from rest_framework.routers import DefaultRouter
 from .views import (
     HealthProfileViewSet, WeightLogViewSet,
     NutritionGoalViewSet, WaterLogViewSet, ExerciseLogViewSet,
     FoodViewSet, FoodEntryViewSet,
+    AISuggestionView,
 )
 
 router = DefaultRouter()
@@ -14,4 +16,6 @@ router.register(r'exercise-logs', ExerciseLogViewSet, basename='exercise-log')
 router.register(r'foods', FoodViewSet, basename='food')
 router.register(r'food-entries', FoodEntryViewSet, basename='food-entry')
 
-urlpatterns = router.urls
+urlpatterns = router.urls + [
+    path('ai-suggestion/', AISuggestionView.as_view(), name='ai-suggestion'),
+]
