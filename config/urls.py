@@ -3,7 +3,6 @@ from django.urls import path, include
 from django.conf import settings
 from django.conf.urls.static import static
 from django.http import JsonResponse
-from django.urls import include, path
 
 
 def home(request):
@@ -46,11 +45,6 @@ urlpatterns = [
     path(
         "api/auth/admin/",
         include("admin_panel.urls")
-    ),
-
-    path(
-        "api/payments/",
-        include("payments.urls")
     ),
 ] + static(
     settings.MEDIA_URL,

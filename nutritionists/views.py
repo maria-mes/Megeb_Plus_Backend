@@ -1,4 +1,5 @@
 from django.utils import timezone
+from rest_framework.parsers import FormParser, MultiPartParser
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated, IsAdminUser
 from rest_framework.response import Response
@@ -10,57 +11,17 @@ from .models import (
 )
 from rest_framework import status as http_status
 from django.shortcuts import get_object_or_404
-from .renderers import CamelCaseAPIMixin, CamelCaseMultipartAPIMixin
 from .serializers import (
     NutritionistApplicationSerializer,
     NutritionistProfileSerializer,
 )
 
 
-class NutritionistListView(CamelCaseAPIMixin, APIView):
-    """
-    GET /api/nutritionists/
 
-    Public-ish browse list mobile's appointments.ts needs to let a
-    client pick who to book with. Only verified nutritionists are
-    shown. Optional ?specialization= filter for a simple substring
-    match.
-    """
+class NutritionistApplicationCreateView(APIView):
 
     permission_classes = [IsAuthenticated]
-
-    def get(self, request):
-
-        nutritionists = NutritionistProfile.objects.filter(
-            is_verified=True
-        ).select_related("user")
-
-        specialization = request.query_params.get("specialization")
-
-        if specialization:
-            nutritionists = nutritionists.filter(
-                specialization__icontains=specialization
-            )
-
-        serializer = NutritionistProfileSerializer(
-            nutritionists,
-            many=True,
-        )
-
-        return Response(serializer.data)
-
-
-class NutritionistApplicationCreateView(CamelCaseMultipartAPIMixin, APIView):
-    """
-    Multipart (file upload) view, so it uses CamelCaseMultipartAPIMixin
-    instead of CamelCaseAPIMixin — that mixin's parser_classes
-    (CamelCaseMultiPartParser/CamelCaseFormParser) replace the plain
-    MultiPartParser/FormParser this view used to hardcode, so camelCase
-    text fields in the multipart body still get converted the same way
-    a JSON body would.
-    """
-
-    permission_classes = [IsAuthenticated]
+    parser_classes = (MultiPartParser, FormParser)
 
     def post(self, request):
 
@@ -90,16 +51,11 @@ class NutritionistApplicationCreateView(CamelCaseMultipartAPIMixin, APIView):
         application = serializer.save(
             user=request.user
         )
+        verify_application(application)  
         # Run initial license verification
-        verify_application(application)
+       
 
-        return Response(
-            NutritionistApplicationSerializer(application).data,
-            status=status.HTTP_201_CREATED
-        )
-
-
-class NutritionistApplicationAIVerifyView(CamelCaseAPIMixin, APIView):
+class NutritionistApplicationAIVerifyView(APIView):
     """POST /api/nutritionists/applications/<id>/ai-verify/
     Re-runs the AI verification engine and returns the result."""
     permission_classes = [IsAdminUser]   # or your own admin/staff permission
@@ -116,9 +72,12 @@ class NutritionistApplicationAIVerifyView(CamelCaseAPIMixin, APIView):
             },
             status=http_status.HTTP_200_OK,
         )
+        
+
+    
 
 
-class MyNutritionistApplicationView(CamelCaseAPIMixin, APIView):
+class MyNutritionistApplicationView(APIView):
 
     permission_classes = [IsAuthenticated]
 
@@ -143,9 +102,7 @@ class MyNutritionistApplicationView(CamelCaseAPIMixin, APIView):
                 application
             ).data
         )
-
-
-class NutritionistApplicationReviewView(CamelCaseAPIMixin, APIView):
+class NutritionistApplicationReviewView(APIView):
 
     permission_classes = [IsAdminUser]
 
@@ -247,9 +204,7 @@ class NutritionistApplicationReviewView(CamelCaseAPIMixin, APIView):
                 ).data,
             }
         )
-
-
-class NutritionistProfileView(CamelCaseAPIMixin, APIView):
+class NutritionistProfileView(APIView):
 
     permission_classes = [IsAuthenticated]
 

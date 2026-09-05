@@ -33,7 +33,6 @@ INSTALLED_APPS = [
     'appointments',
     'admin_panel',
     'chat',
-    'payments',
 ]
 
 REST_FRAMEWORK = {
@@ -113,10 +112,8 @@ EMAIL_HOST_USER = os.getenv('EMAIL_HOST_USER', '')
 EMAIL_HOST_PASSWORD = os.getenv('EMAIL_HOST_PASSWORD', '')
 DEFAULT_FROM_EMAIL = os.getenv('DEFAULT_FROM_EMAIL', EMAIL_HOST_USER)
 
-CORS_ALLOWED_ORIGINS = [
-    "http://localhost:3000",
-    "http://127.0.0.1:3000",
-]
+CORS_ALLOW_ALL_ORIGINS = True
+
 
 AUTHENTICATION_BACKENDS = [
     "django.contrib.auth.backends.ModelBackend",
@@ -127,22 +124,3 @@ AFROMESSAGE_TOKEN = os.getenv("AFROMESSAGE_TOKEN")
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 MEDIA_URL = "/media/"
 MEDIA_ROOT = BASE_DIR / "media"
-
-STARPAY_API_BASE_URL = os.getenv(
-    "STARPAY_API_BASE_URL",
-    "https://sandbox-api.starpayethiopia.com/v1/starpay-api",
-)
-
-STARPAY_API_SECRET = os.getenv("STARPAY_API_SECRET")
-
-STARPAY_CALLBACK_URL = os.getenv("STARPAY_CALLBACK_URL")
-
-STARPAY_REDIRECT_URL = os.getenv("STARPAY_REDIRECT_URL")
-
-PLATFORM_COMMISSION_PERCENTAGE = float(
-    os.getenv(
-        "PLATFORM_COMMISSION_PERCENTAGE",
-        "0",
-    )
-)
-GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-2.5-flash")

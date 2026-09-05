@@ -1,7 +1,6 @@
 from django.urls import path
 
 from .views import (
-    NutritionistListView,
     NutritionistApplicationCreateView,
     MyNutritionistApplicationView,
     NutritionistApplicationReviewView,
@@ -11,12 +10,6 @@ from .views import NutritionistApplicationAIVerifyView
 
 
 urlpatterns = [
-
-    path(
-        "",
-        NutritionistListView.as_view(),
-        name="nutritionist-list",
-    ),
 
     path(
         "apply/",
