@@ -10,6 +10,7 @@ from django.core.mail import send_mail
 from django.conf import settings
 from datetime import timedelta
 from rest_framework_simplejwt.views import TokenObtainPairView
+from django.db.models import Q   # ✅ needed if you query by email OR phone
 
 from .models import User, OTPVerification, PendingRegistration, StaffApplication
 from .serializers import (
@@ -117,10 +118,37 @@ class LoginView(APIView):
     def post(self, request):
         serializer = LoginSerializer(data=request.data)
         if serializer.is_valid():
-            return Response(serializer.validated_data, status=status.HTTP_200_OK)
+            user = User.objects.get(
+                Q(email=serializer.validated_data["email"]) |
+                Q(phone=serializer.validated_data["phone"])
+            )
+            # 🔹 bump token_version here
+            user.token_version += 1
+            user.save(update_fields=["token_version"])
+
+            # include token_version in the response
+            data = serializer.validated_data
+            data["token_version"] = user.token_version
+            return Response(data, status=status.HTTP_200_OK)
+
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
+
+class LogoutView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        try:
+            # Blacklist the refresh token so it can’t mint new access tokens
+            refresh_token = request.data.get("refresh")
+            if refresh_token:
+                from rest_framework_simplejwt.tokens import RefreshToken
+                token = RefreshToken(refresh_token)
+                token.blacklist()
+            return Response({"message": "Logged out successfully."}, status=200)
+        except Exception:
+            return Response({"detail": "Invalid or missing refresh token."}, status=400)
 
 class SendOTPView(APIView):
 
@@ -314,6 +342,8 @@ class ResetPasswordView(APIView):
             return Response({"detail": "No account found with this email."}, status=status.HTTP_404_NOT_FOUND)
 
         user.set_password(new_password)
+        user.token_version += 1   # revoke all old tokens
+        user.save(update_fields=["password", "token_version"])
         user.save()
         verified_otp.delete()
 

@@ -6,7 +6,7 @@ class UserManager(BaseUserManager):
     def create_user(self, phone=None, email=None, password=None, **extra_fields):
         if not phone and not email:
             raise ValueError("Phone or email is required")
-        user = self.model(phone=phone, email=email, **extra_fields)
+        user = self.model(phone=phone, email=email,token_version=0, **extra_fields)
         user.set_password(password)
         user.save(using=self._db)
         return user
@@ -26,7 +26,7 @@ class User(AbstractBaseUser, PermissionsMixin):
         ("admin", "Admin"),
         ("vendor", "Vendor"),
     ]
-
+    
     id = models.BigAutoField(primary_key=True)
 
     full_name = models.CharField(max_length=255)
@@ -56,7 +56,9 @@ class User(AbstractBaseUser, PermissionsMixin):
     is_active = models.BooleanField(default=True)
 
     is_staff = models.BooleanField(default=False)
-
+    
+    token_version = models.PositiveIntegerField(default=0)
+    
     created_at = models.DateTimeField(auto_now_add=True)
 
     updated_at = models.DateTimeField(auto_now=True)

@@ -26,6 +26,10 @@ urlpatterns = [
         "api/nutritionists/",
         include("nutritionists.urls")
     ),
+    path(
+    "api/nutritionist/",
+    include("nutrition_plans.urls"),
+),
 
     path(
         "api/chat/",
