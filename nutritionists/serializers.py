@@ -1,9 +1,12 @@
 from rest_framework import serializers
 
+from django.contrib.auth import get_user_model
 from .models import (
     NutritionistApplication,
     NutritionistProfile,
 )
+from django.contrib.auth import get_user_model
+User = get_user_model()
 
 
 class NutritionistApplicationSerializer(
@@ -123,4 +126,35 @@ class NutritionistProfileSerializer(
             "rating",
             "created_at",
             "updated_at",
+        ]
+class ClientDetailSerializer(serializers.ModelSerializer):
+    preferences = serializers.SerializerMethodField()
+    allergies = serializers.SerializerMethodField()
+    nutrition_plans = serializers.SerializerMethodField()
+
+    class Meta:
+        model = User
+        fields = [
+            "id", "full_name", "email", "phone",
+            "profile_picture", "is_verified",
+            "preferences", "allergies", "nutrition_plans"
+        ]
+
+    def get_preferences(self, obj):
+        return [pref.name for pref in getattr(obj, "preferences", [])]
+
+    def get_allergies(self, obj):
+        return [allergy.name for allergy in getattr(obj, "allergies", [])]
+
+    def get_nutrition_plans(self, obj):
+        plans = getattr(obj, "nutrition_plans", []).all() if hasattr(obj, "nutrition_plans") else []
+        return [
+            {
+                "id": plan.id,
+                "plan_name": plan.plan_name,
+                "status": plan.status,
+                "start_date": plan.start_date,
+                "end_date": plan.end_date,
+            }
+            for plan in plans
         ]
