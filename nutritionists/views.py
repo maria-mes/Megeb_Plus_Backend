@@ -269,11 +269,29 @@ class NutritionistProfileView(APIView):
             status=status.HTTP_400_BAD_REQUEST
         )
 class ClientDetailView(APIView):
-    permission_classes = [IsAuthenticated, IsNutritionist]
+
+    permission_classes = [
+        IsAuthenticated,
+        IsNutritionist,
+    ]
 
     def get(self, request, client_id):
-        client = get_object_or_404(User, id=client_id, role="user", is_active=True)
-        serializer = ClientDetailSerializer(client)
+
+        client = get_object_or_404(
+            User.objects.filter(
+                role="user",
+                is_active=True,
+                client_appointments__nutritionist=request.user,
+            ).distinct(),
+            id=client_id,
+        )
+
+        serializer = ClientDetailSerializer(
+            client,
+            context={"request": request},
+        )
+        print("Authenticated nutritionist ID:", request.user.id)
+
         return Response(serializer.data)
 class NutritionistClientsListView(APIView):
     permission_classes = [IsAuthenticated, IsNutritionist]

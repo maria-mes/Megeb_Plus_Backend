@@ -6,7 +6,9 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from .serializers import PlanMealSerializer
 from django.utils import timezone
-
+from nutritionists.serializers import ClientDetailSerializer
+from django.contrib.auth import get_user_model
+User = get_user_model()
 from .models import (
     Food,
     MealLibrary,
@@ -22,6 +24,7 @@ from .serializers import (
     NutritionPlanUpdateSerializer,
     MealLibrarySerializer,
     MealLibraryCreateSerializer,
+    
 )
 
 
@@ -222,31 +225,26 @@ class ClientListView(APIView):
 
     def get(self, request):
 
-        clients = request.user.__class__.objects.filter(
+        clients = User.objects.filter(
             role="user",
             is_active=True,
-        ).order_by("full_name")
+            client_appointments__nutritionist=request.user,
+        ).distinct().order_by("full_name")
 
-        search = request.query_params.get(
-            "search"
-        )
+        search = request.query_params.get("search")
 
         if search:
             clients = clients.filter(
                 full_name__icontains=search
             )
 
-        data = [
-            {
-                "id": str(client.id),
-                "name": client.full_name,
-                "preferences": "",
-                "allergies": "",
-            }
-            for client in clients
-        ]
+        serializer = ClientDetailSerializer(
+            clients,
+            many=True,
+            context={"request": request},
+        )
 
-        return Response(data)
+        return Response(serializer.data)
 class MealLibraryView(APIView):
     permission_classes = [
         IsAuthenticated,

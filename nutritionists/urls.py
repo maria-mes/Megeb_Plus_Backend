@@ -8,6 +8,7 @@ from .views import (
     ClientDetailView,
     NutritionistClientsListView
 )
+from nutrition_plans.views import ClientListView
 from .views import NutritionistApplicationAIVerifyView
 
 
@@ -42,7 +43,15 @@ urlpatterns = [
         name="application-ai-verify",
     ),
    
-    path("clients/<int:client_id>/", ClientDetailView.as_view(), name="client-detail"),
-    path("clients/", NutritionistClientsListView.as_view(), name="nutritionist-clients-list"),
+     path(
+        "clients/",
+        ClientListView.as_view(),
+        name="nutritionist-clients",
+    ),
 
+    path(
+        "clients/<int:client_id>/",
+        ClientDetailView.as_view(),
+        name="nutritionist-client-detail",
+    ),
 ]
