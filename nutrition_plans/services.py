@@ -1,21 +1,13 @@
 from decimal import Decimal
 
+from decimal import Decimal
+
 
 def calculate_food_nutrition(food, quantity):
-    """
-    Calculate nutrition for a given quantity of a food.
-
-    The quantity represents the number of servings.
-    Example:
-        Egg serving_amount = 1
-        quantity = 2
-        => nutrition is multiplied by 2
-    """
-
     quantity = Decimal(str(quantity))
-    serving_amount = Decimal(str(food.serving_amount))
+    grams_per_unit = Decimal(str(food.grams_per_unit))
 
-    if serving_amount <= 0:
+    if grams_per_unit <= 0 or quantity <= 0:
         return {
             "calories": Decimal("0.00"),
             "protein": Decimal("0.00"),
@@ -24,16 +16,31 @@ def calculate_food_nutrition(food, quantity):
             "fiber": Decimal("0.00"),
         }
 
-    multiplier = quantity / serving_amount
+    if food.unit_based:
+        # Example:
+        # Egg = 1 egg
+        # grams_per_unit = 50g
+        # quantity = 2
+        #
+        # Therefore:
+        # 2 eggs = 2 × nutrition of 1 egg
+        multiplier = quantity
+    else:
+        # Example:
+        # Rice = nutrition per 100g
+        # quantity = 200g
+        #
+        # Therefore:
+        # 200g = 2 × nutrition of 100g
+        multiplier = quantity / grams_per_unit
 
     return {
-        "calories": food.calories * multiplier,
-        "protein": food.protein * multiplier,
-        "carbs": food.carbohydrates * multiplier,
-        "fat": food.fat * multiplier,
-        "fiber": food.fiber * multiplier,
+        "calories": (food.calories * multiplier).quantize(Decimal("0.01")),
+        "protein": (food.protein * multiplier).quantize(Decimal("0.01")),
+        "carbs": (food.carbs * multiplier).quantize(Decimal("0.01")),
+        "fat": (food.fat * multiplier).quantize(Decimal("0.01")),
+        "fiber": (food.fiber * multiplier).quantize(Decimal("0.01")),
     }
-
 
 def calculate_meal_nutrition(meal):
     """

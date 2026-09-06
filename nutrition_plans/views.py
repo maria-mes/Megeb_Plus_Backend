@@ -94,6 +94,7 @@ class NutritionPlanDetailView(APIView):
 
     permission_classes = [
         IsAuthenticated,
+        IsNutritionist
     ]
 
     def get_object(self, request, plan_id):
@@ -255,8 +256,8 @@ class MealLibraryView(APIView):
     def get(self, request):
         meals = (
             MealLibrary.objects
-            .filter(nutritionist=request.user)
-            .prefetch_related("ingredients__food")
+            .filter(created_by=request.user)
+            .prefetch_related("items__food")
             .order_by("-created_at")
         )
 
@@ -283,7 +284,7 @@ class MealLibraryView(APIView):
         # Reload with ingredients + foods
         meal = (
             MealLibrary.objects
-            .prefetch_related("ingredients__food")
+            .prefetch_related("items__food")
             .get(pk=meal.pk)
         )
 
@@ -306,7 +307,7 @@ class MealLibraryDetailView(APIView):
         try:
             meal = MealLibrary.objects.get(
                 id=meal_id,
-                nutritionist=request.user
+                created_by=request.user
             )
         except MealLibrary.DoesNotExist:
             return Response(
