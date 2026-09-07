@@ -189,6 +189,7 @@ class NutritionistProfile(models.Model):
         blank=True,
         null=True,
     )
+    location = models.CharField(max_length=255, blank=True)
 
     is_verified = models.BooleanField(
         default=False,

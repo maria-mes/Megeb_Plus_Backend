@@ -9,12 +9,18 @@ from .models import (
     NutritionistApplication,
     NutritionistProfile,
 )
+from appointments.models import Appointment
 from rest_framework import status as http_status
 from django.shortcuts import get_object_or_404
 from .serializers import (
     NutritionistApplicationSerializer,
     NutritionistProfileSerializer,
+    ClientDetailSerializer
 )
+from nutrition_plans.permissions import IsNutritionist   # <-- add this line
+from django.contrib.auth import get_user_model
+User = get_user_model()
+
 
 
 
@@ -262,3 +268,41 @@ class NutritionistProfileView(APIView):
             serializer.errors,
             status=status.HTTP_400_BAD_REQUEST
         )
+class ClientDetailView(APIView):
+
+    permission_classes = [
+        IsAuthenticated,
+        IsNutritionist,
+    ]
+
+    def get(self, request, client_id):
+
+        client = get_object_or_404(
+            User.objects.filter(
+                role="user",
+                is_active=True,
+                client_appointments__nutritionist=request.user,
+            ).distinct(),
+            id=client_id,
+        )
+
+        serializer = ClientDetailSerializer(
+            client,
+            context={"request": request},
+        )
+        print("Authenticated nutritionist ID:", request.user.id)
+
+        return Response(serializer.data)
+class NutritionistClientsListView(APIView):
+    permission_classes = [IsAuthenticated, IsNutritionist]
+
+    def get(self, request):
+        # Get all clients who have appointments with this nutritionist
+        clients = User.objects.filter(
+            client_appointments__nutritionist=request.user,
+            role="user",
+            is_active=True
+        ).distinct().order_by("full_name")
+
+        serializer = ClientDetailSerializer(clients, many=True)
+        return Response(serializer.data)

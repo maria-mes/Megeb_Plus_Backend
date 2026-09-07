@@ -1,9 +1,13 @@
 from rest_framework import serializers
 
+from django.contrib.auth import get_user_model
 from .models import (
     NutritionistApplication,
     NutritionistProfile,
 )
+from nutrition_plans.models import NutritionPlan
+from django.contrib.auth import get_user_model
+User = get_user_model()
 
 
 class NutritionistApplicationSerializer(
@@ -124,3 +128,83 @@ class NutritionistProfileSerializer(
             "created_at",
             "updated_at",
         ]
+class ClientNutritionPlanSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = NutritionPlan
+        fields = [
+            "id",
+            "plan_name",
+            "status",
+            "start_date",
+            "end_date",
+        ]
+
+
+class ClientDetailSerializer(serializers.ModelSerializer):
+    full_name = serializers.CharField(read_only=True)
+    email = serializers.EmailField(read_only=True)
+    phone = serializers.CharField(read_only=True)
+    profile_picture = serializers.URLField(read_only=True)
+    is_verified = serializers.BooleanField(read_only=True)
+
+    preferences = serializers.SerializerMethodField()
+    allergies = serializers.SerializerMethodField()
+    nutrition_plans = serializers.SerializerMethodField()
+
+    class Meta:
+        model = User
+        fields = [
+            "id",
+            "full_name",
+            "email",
+            "phone",
+            "profile_picture",
+            "is_verified",
+            "preferences",
+            "allergies",
+            "nutrition_plans",
+        ]
+
+    def get_preferences(self, obj):
+        try:
+            profile = obj.health_profile
+        except Exception:
+            return []
+
+        preferences = getattr(profile, "preferences", None)
+
+        if not preferences:
+            return []
+
+        if isinstance(preferences, list):
+            return preferences
+
+        return [preferences]
+
+    def get_allergies(self, obj):
+        try:
+            profile = obj.health_profile
+        except Exception:
+            return []
+
+        allergies = getattr(profile, "allergies", None)
+
+        if not allergies:
+            return []
+
+        if isinstance(allergies, list):
+            return allergies
+
+        return [allergies]
+
+    def get_nutrition_plans(self, obj):
+        nutritionist = self.context["request"].user
+
+        plans = obj.nutrition_plans.filter(
+            nutritionist=nutritionist
+        ).order_by("-created_at")
+
+        return ClientNutritionPlanSerializer(
+            plans,
+            many=True
+        ).data

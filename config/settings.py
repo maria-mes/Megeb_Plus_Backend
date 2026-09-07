@@ -34,6 +34,8 @@ INSTALLED_APPS = [
     'admin_panel',
     'chat',
     'payments',
+    'nutrition_plans',
+
 ]
 
 REST_FRAMEWORK = {

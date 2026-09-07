@@ -97,8 +97,12 @@ class LoginSerializer(serializers.Serializer):
         if not user.is_active:
             raise serializers.ValidationError({"detail": "This account is inactive."})
 
+        user.token_version += 1
+        user.save(update_fields=["token_version"])
         # Generate JWT tokens
         refresh = RefreshToken.for_user(user)
+        refresh["token_version"] = user.token_version
+        access = refresh.access_token
         return {
             "refresh": str(refresh),
             "access": str(refresh.access_token),
@@ -111,11 +115,13 @@ class LoginSerializer(serializers.Serializer):
 class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
     def validate(self, attrs):
         data = super().validate(attrs)
-        # Add extra claims to the response body
+        self.user.token_version += 1
+        self.user.save(update_fields=["token_version"])
         data['user_id'] = self.user.id
         data['role'] = self.user.role
         data['email'] = self.user.email
         data['phone'] = self.user.phone
+        data['token_version'] = self.user.token_version
         return data
 
     @classmethod
@@ -125,6 +131,7 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
         token['role'] = user.role
         token['email'] = user.email
         token['phone'] = user.phone
+        token['token_version'] = user.token_version
         return token
 
 class PendingRegistrationSerializer(serializers.ModelSerializer):
