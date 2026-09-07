@@ -4,6 +4,7 @@ from django.contrib.auth import get_user_model
 from .models import (
     NutritionistApplication,
     NutritionistProfile,
+    ClientNote
 )
 from nutrition_plans.models import NutritionPlan
 from django.contrib.auth import get_user_model
@@ -208,3 +209,24 @@ class ClientDetailSerializer(serializers.ModelSerializer):
             plans,
             many=True
         ).data
+
+class ClientNoteSerializer(serializers.ModelSerializer):
+
+    class Meta:
+        model = ClientNote
+        fields = [
+            "id",
+            "nutritionist",
+            "client",
+            "notes",
+            "created_at",
+            "updated_at",
+        ]
+
+        read_only_fields = [
+            "id",
+            "nutritionist",
+            "client",
+            "created_at",
+            "updated_at",
+        ]
