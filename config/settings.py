@@ -35,6 +35,7 @@ INSTALLED_APPS = [
     'chat',
     'payments',
     'nutrition_plans',
+    "vendors",
 
 ]
 
