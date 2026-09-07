@@ -33,6 +33,7 @@ INSTALLED_APPS = [
     'appointments',
     'admin_panel',
     'chat',
+    'payments',
 ]
 
 REST_FRAMEWORK = {
@@ -124,3 +125,10 @@ AFROMESSAGE_TOKEN = os.getenv("AFROMESSAGE_TOKEN")
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 MEDIA_URL = "/media/"
 MEDIA_ROOT = BASE_DIR / "media"
+
+STARPAY_API_BASE_URL = os.getenv("STARPAY_API_BASE_URL")
+STARPAY_API_SECRET = os.getenv("STARPAY_API_SECRET")
+STARPAY_CALLBACK_URL = os.getenv("STARPAY_CALLBACK_URL")
+STARPAY_REDIRECT_URL = os.getenv("STARPAY_REDIRECT_URL")
+PLATFORM_COMMISSION_PERCENTAGE = os.getenv("PLATFORM_COMMISSION_PERCENTAGE", "0")
+GEMINI_MODEL = os.getenv("GEMINI_MODEL")

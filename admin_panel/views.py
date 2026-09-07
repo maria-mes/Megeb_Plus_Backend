@@ -1,15 +1,19 @@
+from decimal import Decimal
+
 from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from django.utils import timezone
 from django.utils.timesince import timesince
-from django.db.models import Count
+from django.db.models import Count, Sum
 from django.db.models.functions import TruncMonth
 from datetime import timedelta
 
 from accounts.models import User, StaffApplication
 from accounts.views import _approve_application, _reject_application
 from appointments.models import Appointment
+from health.models import Food
+from payments.models import PaymentTransaction
 
 from .permissions import IsAdminRole
 from .models import PlatformSettings
@@ -18,6 +22,8 @@ from .serializers import (
     AdminNutritionistSerializer,
     AdminAppointmentSerializer,
     PlatformSettingsSerializer,
+    AdminFoodItemSerializer,
+    AdminProfileSerializer,
 )
 
 
@@ -107,7 +113,7 @@ class AdminAppointmentListView(APIView):
 
     def get(self, request):
         appointments = Appointment.objects.select_related(
-            "user", "slot", "slot__nutritionist"
+            "client", "nutritionist"
         ).order_by("-created_at")
         return Response(AdminAppointmentSerializer(appointments, many=True).data)
 
@@ -124,6 +130,7 @@ class AdminReportsView(APIView):
     def get(self, request):
         now = timezone.now()
         this_month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+        last_month_start = (this_month_start - timedelta(days=1)).replace(day=1)
 
         total_users = User.objects.exclude(role="admin").count()
         total_nutritionists = User.objects.filter(role="nutritionist").count()
@@ -133,11 +140,31 @@ class AdminReportsView(APIView):
             created_at__gte=this_month_start
         ).count()
 
+        # Revenue = platform's own cut (platform_fee), not gross client
+        # payments, since nutritionist payouts aren't Megeb+'s revenue.
+        revenue_this_month = PaymentTransaction.objects.filter(
+            status=PaymentTransaction.STATUS_SUCCESSFUL,
+            paid_at__gte=this_month_start,
+        ).aggregate(total=Sum("platform_fee"))["total"] or Decimal("0")
+
+        revenue_last_month = PaymentTransaction.objects.filter(
+            status=PaymentTransaction.STATUS_SUCCESSFUL,
+            paid_at__gte=last_month_start,
+            paid_at__lt=this_month_start,
+        ).aggregate(total=Sum("platform_fee"))["total"] or Decimal("0")
+
+        if revenue_last_month > 0:
+            revenue_change_pct = ((revenue_this_month - revenue_last_month) / revenue_last_month) * 100
+            revenue_change = f"{revenue_change_pct:+.1f}% vs last month"
+        else:
+            revenue_change = "vs last month: no data"
+
         metrics = [
             {"label": "Total Users", "value": str(total_users), "change": f"+{new_users_this_month} this month"},
             {"label": "Nutritionists", "value": str(total_nutritionists), "change": "active professionals"},
             {"label": "Appointments", "value": str(total_appointments), "change": f"{completed_appointments} completed"},
             {"label": "New Users", "value": str(new_users_this_month), "change": "this month"},
+            {"label": "Revenue", "value": f"ETB {revenue_this_month:,.0f}", "change": revenue_change},
         ]
 
         six_months_start = (now.replace(day=1) - timedelta(days=150)).replace(day=1)
@@ -184,6 +211,14 @@ class AdminDashboardStatsView(APIView):
             created_at__gte=this_month_start
         ).count()
 
+        # Revenue = platform's own cut (platform_fee) from successful
+        # payments this month. Was hardcoded to "0 ETB" before payments
+        # existed — now pulled from payments.PaymentTransaction.
+        revenue_this_month = PaymentTransaction.objects.filter(
+            status=PaymentTransaction.STATUS_SUCCESSFUL,
+            paid_at__gte=this_month_start,
+        ).aggregate(total=Sum("platform_fee"))["total"] or Decimal("0")
+
         stats = [
             {
                 "title": "Total Users",
@@ -207,10 +242,8 @@ class AdminDashboardStatsView(APIView):
                 "icon": "calendar",
             },
             {
-                # Revenue has no real data source yet — payments hasn't been built.
-                # Showing 0 rather than a fabricated number.
                 "title": "Revenue",
-                "value": "0 ETB",
+                "value": f"{revenue_this_month:,.0f} ETB",
                 "change": "",
                 "description": "this month",
                 "icon": "money",
@@ -242,6 +275,83 @@ class AdminSettingsView(APIView):
             return Response(serializer.data)
 
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+# ---------------------------
+# Food Database
+# ---------------------------
+
+class AdminFoodListView(APIView):
+    """
+    Admin-only: list/create rows in the shared health.Food catalog
+    (for the Food Database page). Reuses the same model the mobile
+    app's /foods/ endpoint reads from — no separate admin-only food
+    table.
+    """
+
+    permission_classes = [IsAdminRole]
+
+    def get(self, request):
+        foods = Food.objects.all().order_by("name")
+        return Response(AdminFoodItemSerializer(foods, many=True).data)
+
+    def post(self, request):
+        serializer = AdminFoodItemSerializer(data=request.data)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+# ---------------------------
+# Admin Profile
+# ---------------------------
+
+class AdminProfileView(APIView):
+    """Admin-only: view/edit the logged-in admin's own account details."""
+
+    permission_classes = [IsAdminRole]
+
+    def get(self, request):
+        return Response(AdminProfileSerializer(request.user).data)
+
+    def put(self, request):
+        serializer = AdminProfileSerializer(request.user, data=request.data, partial=True)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+class AdminChangePasswordView(APIView):
+    """Admin-only: change the logged-in admin's own password."""
+
+    permission_classes = [IsAdminRole]
+
+    def post(self, request):
+        current_password = request.data.get("currentPassword")
+        new_password = request.data.get("newPassword")
+
+        if not current_password or not new_password:
+            return Response(
+                {"detail": "currentPassword and newPassword are required."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        user = request.user
+        if not user.check_password(current_password):
+            return Response({"detail": "Current password is incorrect."}, status=status.HTTP_400_BAD_REQUEST)
+
+        if len(new_password) < 8:
+            return Response(
+                {"detail": "New password must be at least 8 characters."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        user.set_password(new_password)
+        user.save()
+
+        return Response({"detail": "Password updated successfully."})
 
 
 # ---------------------------
