@@ -167,46 +167,213 @@ class HealthProfileSerializer(serializers.ModelSerializer):
 
 
 class ClientDetailSerializer(serializers.ModelSerializer):
-    health_profile = HealthProfileSerializer(read_only=True)
-    appointments = AppointmentSerializer(
-        many=True, source="client_appointments", read_only=True
-    )
 
-    # Computed fields (since they don’t exist on User)
+    # ---------------------------------------
+    # HEALTH PROFILE FIELDS
+    # ---------------------------------------
+
+    age = serializers.SerializerMethodField()
+    gender = serializers.SerializerMethodField()
+    height = serializers.SerializerMethodField()
+    currentWeight = serializers.SerializerMethodField()
+    targetWeight = serializers.SerializerMethodField()
+    bmi = serializers.SerializerMethodField()
+    goal = serializers.SerializerMethodField()
+    medicalCondition = serializers.SerializerMethodField()
+    activityLevel = serializers.SerializerMethodField()
+
+    # ---------------------------------------
+    # EXISTING FIELDS
+    # ---------------------------------------
+
     preferences = serializers.SerializerMethodField()
     allergies = serializers.SerializerMethodField()
     nutrition_plans = serializers.SerializerMethodField()
 
+    # ---------------------------------------
+    # APPOINTMENTS
+    # ---------------------------------------
+
+    appointments = AppointmentSerializer(
+        many=True,
+        source="client_appointments",
+        read_only=True
+    )
+
+    # ---------------------------------------
+    # PROGRESS
+    # ---------------------------------------
+
+    progress = serializers.SerializerMethodField()
+
     class Meta:
         model = User
+
         fields = [
-            "id", "full_name", "email", "phone",
-            "profile_picture", "is_verified",
-            "preferences", "allergies", "nutrition_plans",
-            "health_profile", "appointments",
+            "id",
+            "full_name",
+            "email",
+            "phone",
+            "profile_picture",
+            "is_verified",
+
+            # Health information
+            "age",
+            "gender",
+            "height",
+            "currentWeight",
+            "targetWeight",
+            "bmi",
+            "goal",
+            "medicalCondition",
+            "activityLevel",
+
+            # Existing information
+            "preferences",
+            "allergies",
+            "nutrition_plans",
+
+            # Appointments
+            "appointments",
+
+            # Progress
+            "progress",
         ]
 
-    def get_preferences(self, obj):
+    # =======================================
+    # HEALTH PROFILE
+    # =======================================
+
+    def get_health_profile(self, obj):
         try:
-            profile = obj.health_profile
-        except Exception:
+            return obj.health_profile
+        except HealthProfile.DoesNotExist:
+            return None
+
+    def get_age(self, obj):
+        profile = self.get_health_profile(obj)
+        return profile.age if profile else None
+
+    def get_gender(self, obj):
+        profile = self.get_health_profile(obj)
+        return profile.gender if profile else None
+
+    def get_height(self, obj):
+        profile = self.get_health_profile(obj)
+        return float(profile.height_cm) if profile and profile.height_cm is not None else None
+
+    def get_currentWeight(self, obj):
+        profile = self.get_health_profile(obj)
+        return float(profile.weight_kg) if profile and profile.weight_kg is not None else None
+
+    def get_targetWeight(self, obj):
+        """
+        Target weight is NOT stored in HealthProfile.
+
+        It should come from NutritionGoal.target_weight_kg.
+
+        This is temporarily returning None until the exact
+        NutritionGoal relationship/model is confirmed.
+        """
+        return None
+
+    def get_bmi(self, obj):
+        profile = self.get_health_profile(obj)
+
+        if not profile:
+            return None
+
+        if profile.height_cm is None or profile.weight_kg is None:
+            return None
+
+        height_m = float(profile.height_cm) / 100
+        weight_kg = float(profile.weight_kg)
+
+        if height_m <= 0:
+            return None
+
+        bmi = weight_kg / (height_m ** 2)
+
+        return round(bmi, 2)
+
+    def get_goal(self, obj):
+        profile = self.get_health_profile(obj)
+        return profile.health_goal if profile else None
+
+    def get_medicalCondition(self, obj):
+        profile = self.get_health_profile(obj)
+
+        if not profile or not profile.medical_conditions:
             return []
-        return [profile.diet_preference] if profile and profile.diet_preference else []
+
+        return profile.medical_conditions
+
+    def get_activityLevel(self, obj):
+        profile = self.get_health_profile(obj)
+        return profile.activity_level if profile else None
+
+    # =======================================
+    # PREFERENCES
+    # =======================================
+
+    def get_preferences(self, obj):
+        profile = self.get_health_profile(obj)
+
+        if not profile or not profile.diet_preference:
+            return []
+
+        return [profile.diet_preference]
+
+    # =======================================
+    # ALLERGIES
+    # =======================================
 
     def get_allergies(self, obj):
-        try:
-            profile = obj.health_profile
-        except Exception:
+        profile = self.get_health_profile(obj)
+
+        if not profile or not profile.allergies:
             return []
-        return profile.allergies if profile and profile.allergies else []
+
+        return profile.allergies
+
+    # =======================================
+    # NUTRITION PLANS
+    # =======================================
 
     def get_nutrition_plans(self, obj):
         nutritionist = self.context["request"].user
+
         plans = obj.nutrition_plans.filter(
             nutritionist=nutritionist
         ).order_by("-created_at")
-        from .serializers import ClientNutritionPlanSerializer
-        return ClientNutritionPlanSerializer(plans, many=True).data
+
+        return ClientNutritionPlanSerializer(
+            plans,
+            many=True
+        ).data
+
+    # =======================================
+    # PROGRESS
+    # =======================================
+
+    def get_progress(self, obj):
+        profile = self.get_health_profile(obj)
+
+        current_weight = None
+
+        if profile and profile.weight_kg is not None:
+            current_weight = float(profile.weight_kg)
+
+        return {
+            "currentWeight": current_weight,
+            "weightHistory": [],
+            "caloriesConsumed": 0,
+            "calorieGoal": 0,
+            "activityBurned": 0,
+            "waterConsumed": 0,
+            "waterGoal": 0,
+        }
+
 
 class ClientNoteSerializer(serializers.ModelSerializer):
 
