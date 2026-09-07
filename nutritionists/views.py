@@ -11,6 +11,7 @@ from .models import (
     ClientNote
 
 )
+from django.db import transaction
 from appointments.models import Appointment
 from rest_framework import status as http_status
 from django.shortcuts import get_object_or_404
@@ -32,7 +33,8 @@ class NutritionistApplicationCreateView(APIView):
 
     permission_classes = [IsAuthenticated]
     parser_classes = (MultiPartParser, FormParser)
-
+    
+    @transaction.atomic
     def post(self, request):
 
         # Prevent duplicate applications
@@ -63,8 +65,10 @@ class NutritionistApplicationCreateView(APIView):
         )
         verify_application(application)  
         # Run initial license verification
-       
-
+        return Response(
+        NutritionistApplicationSerializer(application).data,
+        status=status.HTTP_201_CREATED)
+            
 class NutritionistApplicationAIVerifyView(APIView):
     """POST /api/nutritionists/applications/<id>/ai-verify/
     Re-runs the AI verification engine and returns the result."""
