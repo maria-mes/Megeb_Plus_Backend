@@ -10,7 +10,6 @@ from django.core.mail import send_mail
 from django.conf import settings
 from datetime import timedelta
 from rest_framework_simplejwt.views import TokenObtainPairView
-from django.db.models import Q   # ✅ needed if you query by email OR phone
 
 from .models import User, OTPVerification, PendingRegistration, StaffApplication
 from .serializers import (
@@ -118,19 +117,18 @@ class LoginView(APIView):
     def post(self, request):
         serializer = LoginSerializer(data=request.data)
         if serializer.is_valid():
-            user = User.objects.get(
-                Q(email=serializer.validated_data["email"]) |
-                Q(phone=serializer.validated_data["phone"])
-            )
-            # 🔹 bump token_version here
-            user.token_version += 1
-            user.save(update_fields=["token_version"])
-
-            # include token_version in the response
-            data = serializer.validated_data
-            data["token_version"] = user.token_version
-            return Response(data, status=status.HTTP_200_OK)
-
+            # FIXED: this previously re-looked-up the user with
+            # User.objects.get(Q(email=...) | Q(phone=...)), which crashed
+            # with MultipleObjectsReturned whenever this user's phone was
+            # None (matching every other user with a NULL phone), and even
+            # when it didn't crash it bumped token_version a SECOND time
+            # after the token had already been issued — invalidating the
+            # just-issued access token immediately against
+            # VersionedJWTAuthentication. LoginSerializer.validate()
+            # already finds the user safely, checks the password, bumps
+            # token_version exactly once, and returns tokens with the
+            # matching version baked in — nothing more is needed here.
+            return Response(serializer.validated_data, status=status.HTTP_200_OK)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
