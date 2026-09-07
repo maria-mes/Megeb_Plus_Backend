@@ -6,7 +6,9 @@ from .models import (
     NutritionistProfile,
     ClientNote
 )
+from health.models import HealthProfile
 from nutrition_plans.models import NutritionPlan
+from appointments.models import Appointment
 from django.contrib.auth import get_user_model
 User = get_user_model()
 
@@ -141,13 +143,36 @@ class ClientNutritionPlanSerializer(serializers.ModelSerializer):
         ]
 
 
-class ClientDetailSerializer(serializers.ModelSerializer):
-    full_name = serializers.CharField(read_only=True)
-    email = serializers.EmailField(read_only=True)
-    phone = serializers.CharField(read_only=True)
-    profile_picture = serializers.URLField(read_only=True)
-    is_verified = serializers.BooleanField(read_only=True)
+class AppointmentSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Appointment
+        fields = ["id", "date", "time", "appointment_type", "mode", "status"]
 
+
+class HealthProfileSerializer(serializers.ModelSerializer):
+    height = serializers.DecimalField(
+        source="height_cm", max_digits=5, decimal_places=2, required=False
+    )
+    weight = serializers.DecimalField(
+        source="weight_kg", max_digits=5, decimal_places=2, required=False
+    )
+
+    class Meta:
+        model = HealthProfile
+        fields = [
+            "age", "gender", "height", "weight",
+            "activity_level", "medical_conditions",
+            "health_goal", "diet_preference",
+        ]
+
+
+class ClientDetailSerializer(serializers.ModelSerializer):
+    health_profile = HealthProfileSerializer(read_only=True)
+    appointments = AppointmentSerializer(
+        many=True, source="client_appointments", read_only=True
+    )
+
+    # Computed fields (since they don’t exist on User)
     preferences = serializers.SerializerMethodField()
     allergies = serializers.SerializerMethodField()
     nutrition_plans = serializers.SerializerMethodField()
@@ -155,15 +180,10 @@ class ClientDetailSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
         fields = [
-            "id",
-            "full_name",
-            "email",
-            "phone",
-            "profile_picture",
-            "is_verified",
-            "preferences",
-            "allergies",
-            "nutrition_plans",
+            "id", "full_name", "email", "phone",
+            "profile_picture", "is_verified",
+            "preferences", "allergies", "nutrition_plans",
+            "health_profile", "appointments",
         ]
 
     def get_preferences(self, obj):
@@ -171,44 +191,22 @@ class ClientDetailSerializer(serializers.ModelSerializer):
             profile = obj.health_profile
         except Exception:
             return []
-
-        preferences = getattr(profile, "preferences", None)
-
-        if not preferences:
-            return []
-
-        if isinstance(preferences, list):
-            return preferences
-
-        return [preferences]
+        return [profile.diet_preference] if profile and profile.diet_preference else []
 
     def get_allergies(self, obj):
         try:
             profile = obj.health_profile
         except Exception:
             return []
-
-        allergies = getattr(profile, "allergies", None)
-
-        if not allergies:
-            return []
-
-        if isinstance(allergies, list):
-            return allergies
-
-        return [allergies]
+        return profile.allergies if profile and profile.allergies else []
 
     def get_nutrition_plans(self, obj):
         nutritionist = self.context["request"].user
-
         plans = obj.nutrition_plans.filter(
             nutritionist=nutritionist
         ).order_by("-created_at")
-
-        return ClientNutritionPlanSerializer(
-            plans,
-            many=True
-        ).data
+        from .serializers import ClientNutritionPlanSerializer
+        return ClientNutritionPlanSerializer(plans, many=True).data
 
 class ClientNoteSerializer(serializers.ModelSerializer):
 
