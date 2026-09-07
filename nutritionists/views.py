@@ -8,6 +8,8 @@ from .verification import verify_application
 from .models import (
     NutritionistApplication,
     NutritionistProfile,
+    ClientNote
+
 )
 from appointments.models import Appointment
 from rest_framework import status as http_status
@@ -15,7 +17,9 @@ from django.shortcuts import get_object_or_404
 from .serializers import (
     NutritionistApplicationSerializer,
     NutritionistProfileSerializer,
-    ClientDetailSerializer
+    ClientDetailSerializer,
+    ClientNoteSerializer
+
 )
 from nutrition_plans.permissions import IsNutritionist   # <-- add this line
 from django.contrib.auth import get_user_model
@@ -306,3 +310,91 @@ class NutritionistClientsListView(APIView):
 
         serializer = ClientDetailSerializer(clients, many=True)
         return Response(serializer.data)
+
+class ClientNotesView(APIView):
+
+    permission_classes = [
+        IsAuthenticated,
+        IsNutritionist,
+    ]
+
+    def get_client(self, request, client_id):
+
+        return get_object_or_404(
+            User.objects.filter(
+                role="user",
+                is_active=True,
+                client_appointments__nutritionist=request.user,
+            ).distinct(),
+            id=client_id,
+        )
+
+    def get(self, request, client_id):
+
+        client = self.get_client(
+            request,
+            client_id,
+        )
+
+        note = ClientNote.objects.filter(
+            nutritionist=request.user,
+            client=client,
+        ).first()
+
+        if not note:
+            return Response({
+                "id": None,
+                "client": client.id,
+                "notes": "",
+                "created_at": None,
+                "updated_at": None,
+            })
+
+        return Response(
+            ClientNoteSerializer(note).data
+        )
+
+    def patch(self, request, client_id):
+
+        client = self.get_client(
+            request,
+            client_id,
+        )
+
+        note = ClientNote.objects.filter(
+            nutritionist=request.user,
+            client=client,
+        ).first()
+
+        if note:
+            serializer = ClientNoteSerializer(
+                note,
+                data=request.data,
+                partial=True,
+            )
+        else:
+            serializer = ClientNoteSerializer(
+                data=request.data,
+                partial=True,
+            )
+
+        serializer.is_valid(
+            raise_exception=True
+        )
+
+        if note:
+            note = serializer.save()
+        else:
+            note = ClientNote.objects.create(
+                nutritionist=request.user,
+                client=client,
+                notes=serializer.validated_data.get(
+                    "notes",
+                    ""
+                ),
+            )
+
+        return Response(
+            ClientNoteSerializer(note).data,
+            status=status.HTTP_200_OK,
+        )
