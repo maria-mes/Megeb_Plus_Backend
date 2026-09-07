@@ -420,3 +420,30 @@ class DegreeCredential(models.Model):
 
     def __str__(self):
         return f"{self.degree} - {self.institution}"
+
+
+class ClientNote(models.Model):
+    id = models.BigAutoField(primary_key=True)
+
+    nutritionist = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="client_notes",
+    )
+
+    client = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="nutritionist_notes",
+    )
+
+    notes = models.TextField()
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-updated_at"]
+
+    def __str__(self):
+        return f"{self.nutritionist.full_name} → {self.client.full_name}"
