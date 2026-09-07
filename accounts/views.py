@@ -31,46 +31,6 @@ from .services.afromessage import send_otp, verify_otp
 from .services.email_service import generate_otp, send_otp_email, send_registration_confirmation_email
 
 
-class CustomTokenObtainPairSerializer(serializers.Serializer):
-    identifier = serializers.CharField()
-    password = serializers.CharField(write_only=True)
-
-    def validate(self, attrs):
-        identifier = attrs["identifier"].strip()
-        password = attrs["password"]
-
-        user = User.objects.filter(email__iexact=identifier).first()
-
-        if user is None:
-            user = User.objects.filter(phone=identifier).first()
-
-        if user is None:
-            raise serializers.ValidationError({"detail": "Invalid email/phone or password."})
-
-        if not user.check_password(password):
-            raise serializers.ValidationError({"detail": "Invalid email/phone or password."})
-
-        if not user.is_active:
-            raise serializers.ValidationError({"detail": "This account is inactive."})
-
-        refresh = RefreshToken.for_user(user)
-        access_token = refresh.access_token
-
-        # ✅ Add custom claims directly to the token
-        access_token["role"] = user.role
-        access_token["email"] = user.email
-        access_token["phone"] = user.phone
-        access_token["full_name"] = user.full_name
-
-        return {
-            "refresh": str(refresh),
-            "access": str(refresh.access_token),
-            "role": user.role,
-            "full_name": user.full_name,
-            "email": user.email,
-            "phone": user.phone,
-        }
-
 class CustomTokenObtainPairView(TokenObtainPairView):
     serializer_class = CustomTokenObtainPairSerializer
     
@@ -95,23 +55,39 @@ class RegisterView(APIView):
     def post(self, request):
         serializer = RegisterSerializer(data=request.data)
 
-        if serializer.is_valid():
-            user = serializer.save()
+        if not serializer.is_valid():
             return Response(
-                {
-                    "message": "Registration successful.",
-                    "user": {
-                        "id": user.id,
-                        "full_name": user.full_name,
-                        "phone": user.phone,
-                        "is_verified": user.is_verified
-                    }
-                },
-                status=status.HTTP_201_CREATED
+                serializer.errors,
+                status=status.HTTP_400_BAD_REQUEST
             )
 
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        pending = serializer.save()
 
+        # Send OTP through AfroMessage
+        result = send_otp(pending.phone)
+
+        if result.get("acknowledge") != "success":
+            # Don't leave a pending registration if OTP couldn't be sent
+            pending.delete()
+
+            return Response(
+                {
+                    "detail": "Failed to send OTP.",
+                    "response": result
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        verification_id = result["response"]["verificationId"]
+
+        return Response(
+            {
+                "message": "Registration started. OTP sent successfully.",
+                "verificationId": verification_id,
+                "phone": pending.phone
+            },
+            status=status.HTTP_200_OK
+        )
 
 class LoginView(APIView):
     def post(self, request):
@@ -147,59 +123,274 @@ class LogoutView(APIView):
             return Response({"message": "Logged out successfully."}, status=200)
         except Exception:
             return Response({"detail": "Invalid or missing refresh token."}, status=400)
-
 class SendOTPView(APIView):
 
     def post(self, request):
+
         serializer = SendOTPSerializer(data=request.data)
 
         if not serializer.is_valid():
-            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+            return Response(
+                serializer.errors,
+                status=status.HTTP_400_BAD_REQUEST
+            )
 
         phone = serializer.validated_data["phone"]
+        purpose = serializer.validated_data["purpose"]
+
+        # ----------------------------------
+        # Registration OTP
+        # ----------------------------------
+
+        if purpose == "registration":
+
+            if not PendingRegistration.objects.filter(
+                phone=phone
+            ).exists():
+                return Response(
+                    {
+                        "detail": "No pending registration found for this phone number."
+                    },
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+        # ----------------------------------
+        # Password reset OTP
+        # ----------------------------------
+
+        elif purpose == "password_reset":
+
+            if not User.objects.filter(
+                phone=phone,
+                is_active=True
+            ).exists():
+                return Response(
+                    {
+                        "detail": "No active account found with this phone number."
+                    },
+                    status=status.HTTP_404_NOT_FOUND
+                )
+
+        # ----------------------------------
+        # Send OTP through AfroMessage
+        # ----------------------------------
+
         result = send_otp(phone)
 
         if result.get("acknowledge") != "success":
             return Response(
-                {"detail": "Failed to send OTP.", "response": result},
+                {
+                    "detail": "Failed to send OTP.",
+                    "response": result
+                },
                 status=status.HTTP_400_BAD_REQUEST
             )
 
         verification_id = result["response"]["verificationId"]
 
-        return Response(
-            {"message": "OTP sent successfully.", "verificationId": verification_id},
-            status=status.HTTP_200_OK
+        # ----------------------------------
+        # Store OTP verification record
+        # ----------------------------------
+
+        OTPVerification.objects.create(
+            phone=phone,
+            channel="phone",
+            verification_id=verification_id,
+            purpose=purpose,
+            is_verified=False
         )
 
-
+        return Response(
+            {
+                "message": "OTP sent successfully.",
+                "verificationId": verification_id,
+                "phone": phone,
+                "purpose": purpose
+            },
+            status=status.HTTP_200_OK
+        )
 class VerifyOTPView(APIView):
 
     def post(self, request):
+
         phone = request.data.get("phone")
         otp = request.data.get("otp")
         verification_id = request.data.get("verificationId")
+        purpose = request.data.get("purpose", "registration")
 
         if not phone:
-            return Response({"detail": "Phone number is required."}, status=status.HTTP_400_BAD_REQUEST)
-
-        if not otp:
-            return Response({"detail": "OTP is required."}, status=status.HTTP_400_BAD_REQUEST)
-
-        if not verification_id:
-            return Response({"detail": "Verification ID is required."}, status=status.HTTP_400_BAD_REQUEST)
-
-        result = verify_otp(phone, otp, verification_id)
-
-        if result.get("acknowledge") != "success":
             return Response(
-                {"detail": "Invalid or expired OTP.", "response": result},
+                {"detail": "Phone number is required."},
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-        return Response({"message": "OTP verified successfully."}, status=status.HTTP_200_OK)
+        if not otp:
+            return Response(
+                {"detail": "OTP is required."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
 
+        if not verification_id:
+            return Response(
+                {"detail": "Verification ID is required."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
 
+        if purpose not in ["registration", "password_reset"]:
+            return Response(
+                {"detail": "Invalid OTP purpose."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # ----------------------------------
+        # Verify with AfroMessage
+        # ----------------------------------
+
+        result = verify_otp(
+            phone,
+            otp,
+            verification_id
+        )
+
+        if result.get("acknowledge") != "success":
+            return Response(
+                {
+                    "detail": "Invalid or expired OTP.",
+                    "response": result
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # ----------------------------------
+        # Find OTP record
+        # ----------------------------------
+
+        record = OTPVerification.objects.filter(
+            phone=phone,
+            verification_id=verification_id,
+            channel="phone",
+            purpose=purpose,
+            is_verified=False
+        ).order_by("-created_at").first()
+
+        if not record:
+            return Response(
+                {"detail": "OTP verification record not found."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        if record.created_at < timezone.now() - timedelta(minutes=10):
+            return Response(
+                {"detail": "OTP has expired."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # Mark verified
+        record.is_verified = True
+        record.verified_at = timezone.now()
+        record.save(
+            update_fields=[
+                "is_verified",
+                "verified_at"
+            ]
+        )
+
+        # ==================================
+        # REGISTRATION
+        # ==================================
+
+        if purpose == "registration":
+
+            pending = PendingRegistration.objects.filter(
+                phone=phone
+            ).first()
+
+            if not pending:
+                return Response(
+                    {
+                        "detail": "No pending registration found."
+                    },
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            if User.objects.filter(phone=phone).exists():
+                pending.delete()
+
+                return Response(
+                    {
+                        "detail": "This phone number is already registered."
+                    },
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            # Create user
+            user = User(
+                full_name=pending.full_name,
+                phone=pending.phone,
+                email=pending.email,
+                role="user",
+                is_verified=True,
+                is_active=True,
+                token_version=0,
+            )
+
+            # Already hashed
+            user.password = pending.password
+            user.save()
+
+            # Create empty health profile
+            from health.models import HealthProfile
+
+            HealthProfile.objects.get_or_create(
+                user=user
+            )
+
+            # Remove pending registration
+            pending.delete()
+
+            # JWT
+            refresh = RefreshToken.for_user(user)
+
+            refresh["role"] = user.role
+            refresh["email"] = user.email
+            refresh["phone"] = user.phone
+            refresh["token_version"] = user.token_version
+
+            access = refresh.access_token
+
+            return Response(
+                {
+                    "message": "Registration complete.",
+                    "registration_complete": False,
+                    "requires_health_profile": True,
+
+                    "access": str(access),
+                    "refresh": str(refresh),
+
+                    "user": {
+                        "id": user.id,
+                        "full_name": user.full_name,
+                        "phone": user.phone,
+                        "email": user.email,
+                        "role": user.role,
+                        "is_verified": user.is_verified,
+                    }
+                },
+                status=status.HTTP_201_CREATED
+            )
+
+        # ==================================
+        # PASSWORD RESET
+        # ==================================
+
+        return Response(
+            {
+                "message": "OTP verified successfully.",
+                "phone": phone,
+                "purpose": "password_reset"
+            },
+            status=status.HTTP_200_OK
+        )
 # ---------------------------
 # Email flow — user registration (mobile app)
 # ---------------------------

@@ -31,11 +31,19 @@ class RegisterSerializer(serializers.ModelSerializer):
     confirm_password = serializers.CharField(
         write_only=True
     )
-    email = serializers.EmailField(required=False, allow_null=True)
-    phone = serializers.CharField(required=False, allow_null=True)
+
+    email = serializers.EmailField(
+        required=False,
+        allow_null=True
+    )
+
+    phone = serializers.CharField(
+        required=False,
+        allow_null=True
+    )
 
     class Meta:
-        model = User
+        model = PendingRegistration
         fields = [
             "full_name",
             "phone",
@@ -50,8 +58,25 @@ class RegisterSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError({
                 "confirm_password": "Passwords do not match."
             })
+
         if not data.get("phone") and not data.get("email"):
-            raise serializers.ValidationError({"detail": "Either phone or email is required."})
+            raise serializers.ValidationError({
+                "detail": "Either phone or email is required."
+            })
+
+        if data.get("phone") and User.objects.filter(
+            phone=data["phone"]
+        ).exists():
+            raise serializers.ValidationError({
+                "phone": "This phone number is already registered."
+            })
+
+        if data.get("email") and User.objects.filter(
+            email=data["email"]
+        ).exists():
+            raise serializers.ValidationError({
+                "email": "This email is already registered."
+            })
 
         return data
 
@@ -61,25 +86,18 @@ class RegisterSerializer(serializers.ModelSerializer):
 
         password = validated_data.pop("password")
 
-        user = User.objects.create_user(
-            password=password,
+        validated_data["password"] = make_password(password)
+
+        # Remove an old unfinished registration
+        if validated_data.get("phone"):
+            PendingRegistration.objects.filter(
+                phone=validated_data["phone"]
+            ).delete()
+
+        return PendingRegistration.objects.create(
             **validated_data
         )
-
-        return user
-
-    def create(self, validated_data):
-
-        validated_data.pop("confirm_password")
-
-        password = validated_data.pop("password")
-
-        user = User.objects.create_user(
-            password=password,
-            **validated_data
-        )
-
-        return user
+        
 class LoginSerializer(serializers.Serializer):
     identifier = serializers.CharField()
     password = serializers.CharField(write_only=True)
@@ -181,12 +199,14 @@ class PendingRegistrationSerializer(serializers.ModelSerializer):
 
 class SendOTPSerializer(serializers.Serializer):
     phone = serializers.CharField()
-
-
-# ---------------------------
-# Email flow — user registration (mobile app)
-# ---------------------------
-
+    purpose = serializers.ChoiceField(
+        choices=[
+            "registration",
+            "password_reset"
+        ],
+        default="registration"
+    )
+    
 class EmailRegisterSerializer(serializers.ModelSerializer):
     """Step 1: role=user registers with email. Stages in PendingRegistration."""
 
