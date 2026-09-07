@@ -206,8 +206,7 @@ def verify_application(application, persist=True):
     ml = ml_score(result)
     if ml is not None:
           result["ml_score"] = ml
-    # e.g. average rule score with model score once you trust it:
-    score = int(round((score + ml) / 2))
+          score = int(round((score + ml) / 2))
     result["score"] = score
     # (re-derive status from the blended score if you like)
     if persist:
