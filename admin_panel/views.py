@@ -5,6 +5,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from django.utils import timezone
 from django.utils.timesince import timesince
+from django.db import transaction
 from django.db.models import Count, Sum
 from django.db.models.functions import TruncMonth
 from datetime import timedelta
@@ -13,6 +14,7 @@ from accounts.models import User, StaffApplication
 from accounts.views import _approve_application, _reject_application
 from appointments.models import Appointment
 from health.models import Food
+from vendors.models import VendorApplication, VendorProfile
 from payments.models import PaymentTransaction
 
 from .permissions import IsAdminRole
@@ -24,6 +26,7 @@ from .serializers import (
     PlatformSettingsSerializer,
     AdminFoodItemSerializer,
     AdminProfileSerializer,
+     AdminFoodVendorSerializer,
 )
 
 
@@ -398,18 +401,160 @@ class AdminVerificationCountView(APIView):
         return Response({"count": count})
 
 
+class AdminFoodVendorListView(APIView):
+    """Admin-only: list food vendor applications."""
+
+    permission_classes = [IsAdminRole]
+
+    def get(self, request):
+        status_param = request.query_params.get("status")
+
+        applications = VendorApplication.objects.select_related(
+            "user"
+        ).order_by("-created_at")
+
+        if status_param:
+            applications = applications.filter(status=status_param.lower())
+
+        serializer = AdminFoodVendorSerializer(
+            applications,
+            many=True,
+            context={"request": request},
+        )
+
+        return Response(serializer.data)
+
+
+class AdminFoodVendorDetailView(APIView):
+    """Admin-only: approve or reject a food vendor application."""
+
+    permission_classes = [IsAdminRole]
+
+    def patch(self, request, application_id):
+        application = VendorApplication.objects.select_related("user").filter(
+            id=application_id
+        ).first()
+
+        if not application:
+            return Response(
+                {"detail": "Vendor application not found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        if application.status != "pending":
+            return Response(
+                {"detail": "Application already reviewed."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        new_status = request.data.get("status")
+
+        if new_status not in ["Approved", "Rejected"]:
+            return Response(
+                {"detail": "status must be 'Approved' or 'Rejected'."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if new_status == "Rejected":
+            with transaction.atomic():
+                application.status = "rejected"
+                application.rejection_reason = request.data.get(
+                    "reason",
+                    "Application rejected by administrator.",
+                )
+                application.reviewed_at = timezone.now()
+                application.save(
+                    update_fields=[
+                        "status",
+                        "rejection_reason",
+                        "reviewed_at",
+                        "updated_at",
+                    ]
+                )
+
+                application.user.is_active = False
+                application.user.save(update_fields=["is_active"])
+
+                VendorProfile.objects.filter(
+                    user=application.user
+                ).update(
+                    is_verified=False,
+                    is_active=False,
+                )
+
+            return Response(
+                AdminFoodVendorSerializer(
+                    application,
+                    context={"request": request},
+                ).data
+            )
+
+        # Approval requires the AI verification to have completed
+        # with an acceptable result.
+        if application.ai_status not in ["verified", "needs_review"]:
+            return Response(
+                {
+                    "detail": (
+                        "Vendor cannot be approved until AI verification "
+                        "is completed."
+                    )
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        with transaction.atomic():
+            profile, _ = VendorProfile.objects.get_or_create(
+                user=application.user,
+                defaults={
+                    "business_name": application.business_name,
+                    "business_address": application.business_address,
+                    "business_type": application.business_type,
+                },
+            )
+
+            profile.business_name = application.business_name
+            profile.business_address = application.business_address
+            profile.business_type = application.business_type
+            profile.is_verified = True
+            profile.is_active = True
+            profile.save()
+
+            application.status = "approved"
+            application.reviewed_at = timezone.now()
+            application.rejection_reason = ""
+            application.save(
+                update_fields=[
+                    "status",
+                    "reviewed_at",
+                    "rejection_reason",
+                    "updated_at",
+                ]
+            )
+
+            application.user.is_active = True
+            application.user.role = "vendor"
+            application.user.save(update_fields=["is_active", "role"])
+
+            profile.products.update(is_active=True)
+
+        return Response(
+            AdminFoodVendorSerializer(
+                application,
+                context={"request": request},
+            ).data
+        )
+
+
 class AdminFoodVendorCountView(APIView):
-    """
-    Admin-only: count of vendor applications by status, for the sidebar badge.
-    NOTE: assumes vendor applications go through the same StaffApplication model
-    as nutritionists (confirmed true as of this writing — one vendor test
-    application exists). If the vendor teammate builds a separate application
-    flow/model later, this endpoint will need to point at that instead.
-    """
+    """Admin-only: count food vendor applications by status."""
 
     permission_classes = [IsAdminRole]
 
     def get(self, request):
         status_param = request.query_params.get("status", "pending")
-        count = StaffApplication.objects.filter(role="vendor", status=status_param).count()
+
+        count = VendorApplication.objects.filter(
+            status=status_param.lower()
+        ).count()
+
         return Response({"count": count})

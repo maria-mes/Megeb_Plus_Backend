@@ -8,6 +8,8 @@ from .views import (
     AdminSettingsView,
     AdminVerificationRequestsView,
     AdminVerificationCountView,
+    AdminFoodVendorListView,
+    AdminFoodVendorDetailView,
     AdminFoodVendorCountView,
     AdminFoodListView,
     AdminProfileView,
@@ -40,5 +42,8 @@ urlpatterns = [
 
     path("verification-requests", AdminVerificationRequestsView.as_view(), name="admin-verification-requests"),
     path("verification-requests/count", AdminVerificationCountView.as_view(), name="admin-verification-count"),
-    path("food-vendors/count", AdminFoodVendorCountView.as_view(), name="admin-food-vendor-count"),
+    path("food-vendors", AdminFoodVendorListView.as_view(), name="admin-food-vendors"),
+    path("food-vendors/<int:application_id>", AdminFoodVendorDetailView.as_view(), name="admin-food-vendor-detail"),
+    path("food-vendors/count", AdminFoodVendorCountView.as_view(), name="admin-food-vendor-count")
+
 ]

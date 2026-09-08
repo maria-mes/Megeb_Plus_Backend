@@ -3,6 +3,7 @@ from accounts.models import User, StaffApplication
 from appointments.models import Appointment
 from health.models import Food
 from .models import PlatformSettings
+from vendors.models import VendorApplication
 
 
 class AdminUserSerializer(serializers.ModelSerializer):
@@ -146,3 +147,81 @@ class AdminProfileSerializer(serializers.ModelSerializer):
 
     def get_role(self, obj):
         return "System Administrator" if obj.role == "admin" else obj.role.capitalize()
+class AdminFoodVendorSerializer(serializers.ModelSerializer):
+    id = serializers.IntegerField(read_only=True)
+    businessName = serializers.CharField(source="business_name")
+    ownerName = serializers.CharField(source="user.full_name", read_only=True)
+    email = serializers.EmailField(source="user.email", read_only=True)
+    phone = serializers.CharField(source="user.phone", read_only=True)
+    businessLicenseNumber = serializers.CharField(
+        source="license_number",
+        allow_blank=True,
+        required=False,
+    )
+    foodSafetyCertNumber = serializers.SerializerMethodField()
+    address = serializers.CharField(source="business_address")
+    status = serializers.SerializerMethodField()
+    appliedDate = serializers.SerializerMethodField()
+    documents = serializers.SerializerMethodField()
+
+    class Meta:
+        model = VendorApplication
+        fields = [
+            "id",
+            "businessName",
+            "ownerName",
+            "email",
+            "phone",
+            "businessLicenseNumber",
+            "foodSafetyCertNumber",
+            "address",
+            "status",
+            "appliedDate",
+            "documents",
+        ]
+
+    def get_foodSafetyCertNumber(self, obj):
+        # VendorApplication currently stores the certificate as a file,
+        # not as a separate certificate-number field.
+        return ""
+
+    def get_status(self, obj):
+        return obj.status.capitalize()
+
+    def get_appliedDate(self, obj):
+        return obj.created_at.strftime("%Y-%m-%d")
+
+    def get_documents(self, obj):
+        request = self.context.get("request")
+        documents = []
+
+        files = [
+            ("Business License", obj.license_document),
+            ("Food Safety Certificate", obj.food_safety_certificate),
+            ("Owner ID", obj.owner_id_document),
+        ]
+
+        for label, file_field in files:
+            if not file_field:
+                continue
+
+            file_url = file_field.url
+            if request:
+                file_url = request.build_absolute_uri(file_url)
+
+            filename = file_field.name.split("/")[-1]
+            extension = filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
+
+            file_type = "image" if extension in {
+                "jpg", "jpeg", "png", "webp", "gif"
+            } else "pdf"
+
+            documents.append({
+                "label": label,
+                "fileName": filename,
+                "fileType": file_type,
+                "fileUrl": file_url,
+                "uploadedDate": obj.created_at.strftime("%Y-%m-%d"),
+            })
+
+        return documents
