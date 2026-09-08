@@ -36,6 +36,7 @@ INSTALLED_APPS = [
     'payments',
     'nutrition_plans',
     "vendors",
+    'notifications',
 
 ]
 
