@@ -83,6 +83,24 @@ DATABASES = {
         ssl_require=True,
     )
 }
+STORAGES = {
+    "default": {
+        "BACKEND": "storages.backends.s3.S3Storage",
+        "OPTIONS": {
+            "access_key": os.getenv("SUPABASE_S3_ACCESS_KEY_ID"),
+            "secret_key": os.getenv("SUPABASE_S3_SECRET_ACCESS_KEY"),
+            "bucket_name": os.getenv("SUPABASE_STORAGE_BUCKET"),
+            "endpoint_url": os.getenv("SUPABASE_S3_ENDPOINT"),
+            "region_name": os.getenv("SUPABASE_S3_REGION"),
+            "file_overwrite": False,
+            "querystring_auth": True,
+        },
+    },
+
+    "staticfiles": {
+        "BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage",
+    },
+}
 
 AUTH_PASSWORD_VALIDATORS = [
     {
