@@ -168,23 +168,154 @@ class StaffApplication(models.Model):
     phone = models.CharField(max_length=20, null=True, blank=True)
     password = models.CharField(max_length=128)
 
-    role = models.CharField(max_length=20, choices=ROLE_CHOICES)
+    # Megeb+ application role
+    role = models.CharField(
+        max_length=20,
+        choices=ROLE_CHOICES
+    )
 
-    application_data = models.JSONField(default=dict, blank=True)
-    # holds text fields: license number, credential type, insurance
-    # provider, degree, years of experience, specialization, etc.
+    # Professional information
+    current_role = models.CharField(
+        max_length=255,
+        blank=True,
+        default=""
+    )
 
-    license_document = models.FileField(upload_to="applications/licenses/", null=True, blank=True)
-    credential_document = models.FileField(upload_to="applications/credentials/", null=True, blank=True)
-    insurance_document = models.FileField(upload_to="applications/insurance/", null=True, blank=True)
-    degree_document = models.FileField(upload_to="applications/degrees/", null=True, blank=True)
+    specialization = models.CharField(
+        max_length=255,
+        blank=True,
+        default=""
+    )
 
-    status = models.CharField(max_length=10, choices=STATUS_CHOICES, default="pending")
+    years_of_experience = models.PositiveIntegerField(
+        null=True,
+        blank=True
+    )
+
+    # License information
+    license_number = models.CharField(
+        max_length=255,
+        blank=True,
+        default=""
+    )
+
+    license_jurisdiction = models.CharField(
+        max_length=255,
+        blank=True,
+        default=""
+    )
+
+    license_expiration_date = models.DateField(
+        null=True,
+        blank=True
+    )
+
+    # Credential information
+    credential_type = models.CharField(
+        max_length=255,
+        blank=True,
+        default=""
+    )
+
+    credential_number = models.CharField(
+        max_length=255,
+        blank=True,
+        default=""
+    )
+
+    # Insurance information
+    insurance_provider = models.CharField(
+        max_length=255,
+        blank=True,
+        default=""
+    )
+
+    policy_number = models.CharField(
+        max_length=255,
+        blank=True,
+        default=""
+    )
+
+    insurance_expiration_date = models.DateField(
+        null=True,
+        blank=True
+    )
+
+    coverage_limit = models.DecimalField(
+        max_digits=15,
+        decimal_places=2,
+        null=True,
+        blank=True
+    )
+
+    # Education
+    degree = models.CharField(
+        max_length=255,
+        blank=True,
+        default=""
+    )
+
+    institution = models.CharField(
+        max_length=255,
+        blank=True,
+        default=""
+    )
+
+    field_of_study = models.CharField(
+        max_length=255,
+        blank=True,
+        default=""
+    )
+
+    graduation_year = models.PositiveIntegerField(
+        null=True,
+        blank=True
+    )
+
+    # Documents
+    license_document = models.FileField(
+        upload_to="applications/licenses/",
+        null=True,
+        blank=True
+    )
+
+    credential_document = models.FileField(
+        upload_to="applications/credentials/",
+        null=True,
+        blank=True
+    )
+
+    insurance_document = models.FileField(
+        upload_to="applications/insurance/",
+        null=True,
+        blank=True
+    )
+
+    degree_document = models.FileField(
+        upload_to="applications/degrees/",
+        null=True,
+        blank=True
+    )
+
+    status = models.CharField(
+        max_length=10,
+        choices=STATUS_CHOICES,
+        default="pending"
+    )
 
     created_at = models.DateTimeField(auto_now_add=True)
-    reviewed_at = models.DateTimeField(null=True, blank=True)
+
+    reviewed_at = models.DateTimeField(
+        null=True,
+        blank=True
+    )
+
     reviewed_by = models.ForeignKey(
-        "User", null=True, blank=True, on_delete=models.SET_NULL, related_name="reviewed_applications"
+        "User",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="reviewed_applications"
     )
 
     def __str__(self):

@@ -1,13 +1,19 @@
 from rest_framework import serializers
 from django.contrib.auth.hashers import make_password
 from .models import User, PendingRegistration, StaffApplication
-from django.contrib.auth import authenticate
 from django.db.models import Q
-from rest_framework_simplejwt.serializers import RefreshToken, TokenObtainPairSerializer 
-from .models import User
+from rest_framework_simplejwt.serializers import (
+    RefreshToken,
+    TokenObtainPairSerializer,
+)
 
+
+# ============================================================
+# USER SERIALIZER
+# ============================================================
 
 class UserSerializer(serializers.ModelSerializer):
+
     class Meta:
         model = User
         fields = [
@@ -20,6 +26,10 @@ class UserSerializer(serializers.ModelSerializer):
             "is_verified",
         ]
 
+
+# ============================================================
+# REGISTER SERIALIZER
+# ============================================================
 
 class RegisterSerializer(serializers.ModelSerializer):
 
@@ -44,12 +54,13 @@ class RegisterSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = PendingRegistration
+
         fields = [
             "full_name",
             "phone",
             "email",
             "password",
-            "confirm_password"
+            "confirm_password",
         ]
 
     def validate(self, data):
@@ -97,62 +108,111 @@ class RegisterSerializer(serializers.ModelSerializer):
         return PendingRegistration.objects.create(
             **validated_data
         )
-        
+
+
+# ============================================================
+# LOGIN SERIALIZER
+# ============================================================
+
 class LoginSerializer(serializers.Serializer):
+
     identifier = serializers.CharField()
-    password = serializers.CharField(write_only=True)
+
+    password = serializers.CharField(
+        write_only=True
+    )
 
     def validate(self, attrs):
+
         identifier = attrs.get("identifier")
         password = attrs.get("password")
 
         # Find user by email OR phone
-        user = User.objects.filter(Q(email=identifier) | Q(phone=identifier)).first()
-        
+        user = User.objects.filter(
+            Q(email=identifier) |
+            Q(phone=identifier)
+        ).first()
+
         if not user or not user.check_password(password):
-            raise serializers.ValidationError({"detail": "Invalid credentials."})
+            raise serializers.ValidationError({
+                "detail": "Invalid credentials."
+            })
 
         if not user.is_active:
-            raise serializers.ValidationError({"detail": "This account is inactive."})
+            raise serializers.ValidationError({
+                "detail": "This account is inactive."
+            })
 
+        # Invalidate previous tokens
         user.token_version += 1
-        user.save(update_fields=["token_version"])
-        # Generate JWT tokens
+
+        user.save(
+            update_fields=["token_version"]
+        )
+
+        # Generate JWT
         refresh = RefreshToken.for_user(user)
+
         refresh["token_version"] = user.token_version
+
         access = refresh.access_token
+
         return {
             "refresh": str(refresh),
-            "access": str(refresh.access_token),
+            "access": str(access),
             "role": user.role,
             "full_name": user.full_name,
             "email": user.email,
             "phone": user.phone,
         }
 
-class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
+
+# ============================================================
+# CUSTOM JWT SERIALIZER
+# ============================================================
+
+class CustomTokenObtainPairSerializer(
+    TokenObtainPairSerializer
+):
+
     def validate(self, attrs):
+
         data = super().validate(attrs)
+
         self.user.token_version += 1
-        self.user.save(update_fields=["token_version"])
-        data['user_id'] = self.user.id
-        data['role'] = self.user.role
-        data['email'] = self.user.email
-        data['phone'] = self.user.phone
-        data['token_version'] = self.user.token_version
+
+        self.user.save(
+            update_fields=["token_version"]
+        )
+
+        data["user_id"] = self.user.id
+        data["role"] = self.user.role
+        data["email"] = self.user.email
+        data["phone"] = self.user.phone
+        data["token_version"] = self.user.token_version
+
         return data
 
     @classmethod
     def get_token(cls, user):
+
         token = super().get_token(user)
-        # Add extra claims inside the JWT payload itself
-        token['role'] = user.role
-        token['email'] = user.email
-        token['phone'] = user.phone
-        token['token_version'] = user.token_version
+
+        token["role"] = user.role
+        token["email"] = user.email
+        token["phone"] = user.phone
+        token["token_version"] = user.token_version
+
         return token
 
-class PendingRegistrationSerializer(serializers.ModelSerializer):
+
+# ============================================================
+# PENDING REGISTRATION SERIALIZER
+# ============================================================
+
+class PendingRegistrationSerializer(
+    serializers.ModelSerializer
+):
 
     password = serializers.CharField(
         write_only=True,
@@ -165,6 +225,7 @@ class PendingRegistrationSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = PendingRegistration
+
         fields = [
             "full_name",
             "phone",
@@ -173,12 +234,15 @@ class PendingRegistrationSerializer(serializers.ModelSerializer):
         ]
 
     def validate(self, data):
+
         if data["password"] != data["confirm_password"]:
             raise serializers.ValidationError({
                 "confirm_password": "Passwords do not match."
             })
 
-        if User.objects.filter(phone=data["phone"]).exists():
+        if User.objects.filter(
+            phone=data["phone"]
+        ).exists():
             raise serializers.ValidationError({
                 "phone": "This phone number is already registered."
             })
@@ -186,154 +250,487 @@ class PendingRegistrationSerializer(serializers.ModelSerializer):
         return data
 
     def create(self, validated_data):
+
         validated_data.pop("confirm_password")
 
         password = validated_data.pop("password")
 
-        validated_data["password"] = make_password(password)
+        validated_data["password"] = make_password(
+            password
+        )
 
         return PendingRegistration.objects.create(
             **validated_data
         )
 
 
+# ============================================================
+# SEND PHONE OTP
+# ============================================================
+
 class SendOTPSerializer(serializers.Serializer):
+
     phone = serializers.CharField()
+
     purpose = serializers.ChoiceField(
         choices=[
             "registration",
-            "password_reset"
+            "password_reset",
         ],
         default="registration"
     )
-    
-class EmailRegisterSerializer(serializers.ModelSerializer):
-    """Step 1: role=user registers with email. Stages in PendingRegistration."""
 
-    password = serializers.CharField(write_only=True, min_length=8)
-    confirm_password = serializers.CharField(write_only=True)
+
+# ============================================================
+# EMAIL REGISTRATION
+# ============================================================
+
+class EmailRegisterSerializer(
+    serializers.ModelSerializer
+):
+    """
+    Step 1:
+    Register using email.
+    Registration is stored in PendingRegistration.
+    """
+
+    password = serializers.CharField(
+        write_only=True,
+        min_length=8
+    )
+
+    confirm_password = serializers.CharField(
+        write_only=True
+    )
 
     class Meta:
         model = PendingRegistration
-        fields = ["full_name", "email", "password", "confirm_password"]
+
+        fields = [
+            "full_name",
+            "email",
+            "password",
+            "confirm_password",
+        ]
 
     def validate(self, data):
+
         if data["password"] != data["confirm_password"]:
-            raise serializers.ValidationError({"confirm_password": "Passwords do not match."})
+            raise serializers.ValidationError({
+                "confirm_password": "Passwords do not match."
+            })
 
-        if User.objects.filter(email=data["email"]).exists():
-            raise serializers.ValidationError({"email": "This email is already registered."})
+        if User.objects.filter(
+            email=data["email"]
+        ).exists():
+            raise serializers.ValidationError({
+                "email": "This email is already registered."
+            })
 
-        PendingRegistration.objects.filter(email=data["email"]).delete()
+        PendingRegistration.objects.filter(
+            email=data["email"]
+        ).delete()
 
         return data
 
     def create(self, validated_data):
-        validated_data.pop("confirm_password")
-        password = validated_data.pop("password")
-        validated_data["password"] = make_password(password)
-        return PendingRegistration.objects.create(**validated_data)
 
+        validated_data.pop("confirm_password")
+
+        password = validated_data.pop("password")
+
+        validated_data["password"] = make_password(
+            password
+        )
+
+        return PendingRegistration.objects.create(
+            **validated_data
+        )
+
+
+# ============================================================
+# SEND EMAIL OTP
+# ============================================================
 
 class SendEmailOTPSerializer(serializers.Serializer):
-    email = serializers.EmailField()
-    purpose = serializers.ChoiceField(choices=["registration", "password_reset"], default="registration")
 
+    email = serializers.EmailField()
+
+    purpose = serializers.ChoiceField(
+        choices=[
+            "registration",
+            "password_reset",
+        ],
+        default="registration"
+    )
+
+
+# ============================================================
+# VERIFY EMAIL OTP
+# ============================================================
 
 class VerifyEmailOTPSerializer(serializers.Serializer):
-    email = serializers.EmailField()
-    otp = serializers.CharField()
-    purpose = serializers.ChoiceField(choices=["registration", "password_reset"], default="registration")
 
+    email = serializers.EmailField()
+
+    otp = serializers.CharField()
+
+    purpose = serializers.ChoiceField(
+        choices=[
+            "registration",
+            "password_reset",
+        ],
+        default="registration"
+    )
+
+
+# ============================================================
+# RESET PASSWORD
+# ============================================================
 
 class ResetPasswordSerializer(serializers.Serializer):
+
     email = serializers.EmailField()
-    new_password = serializers.CharField(write_only=True, min_length=8)
-    confirm_new_password = serializers.CharField(write_only=True)
+
+    new_password = serializers.CharField(
+        write_only=True,
+        min_length=8
+    )
+
+    confirm_new_password = serializers.CharField(
+        write_only=True
+    )
 
     def validate(self, data):
+
         if data["new_password"] != data["confirm_new_password"]:
-            raise serializers.ValidationError({"confirm_new_password": "Passwords do not match."})
+            raise serializers.ValidationError({
+                "confirm_new_password": "Passwords do not match."
+            })
+
         return data
 
 
-# ---------------------------
-# Staff applications — vendor/nutritionist (website), admin review
-# ---------------------------
+# ============================================================
+# STAFF APPLICATION SERIALIZER
+# VENDOR / NUTRITIONIST
+# ============================================================
 
-class StaffApplicationSerializer(serializers.ModelSerializer):
-    """Vendor/nutritionist submits an application with documents + password."""
+class StaffApplicationSerializer(
+    serializers.ModelSerializer
+):
+    """
+    Serializer used when a vendor or nutritionist
+    submits a staff application.
 
-    password = serializers.CharField(write_only=True, min_length=8)
-    confirm_password = serializers.CharField(write_only=True)
+    Supports:
+    - Basic information
+    - Professional information
+    - License information
+    - Credential information
+    - Insurance information
+    - Education information
+    - Supporting documents
+    """
+
+    password = serializers.CharField(
+        write_only=True,
+        min_length=8
+    )
+
+    confirm_password = serializers.CharField(
+        write_only=True
+    )
 
     class Meta:
         model = StaffApplication
+
         fields = [
-            "full_name", "email", "phone", "role", "password", "confirm_password", "application_data",
-            "license_document", "credential_document", "insurance_document", "degree_document",
+
+            # -----------------------------------------
+            # Basic information
+            # -----------------------------------------
+
+            "full_name",
+            "email",
+            "phone",
+            "role",
+
+            "password",
+            "confirm_password",
+
+            # -----------------------------------------
+            # Professional information
+            # -----------------------------------------
+
+            "current_role",
+            "specialization",
+            "years_of_experience",
+
+            # -----------------------------------------
+            # License information
+            # -----------------------------------------
+
+            "license_number",
+            "license_jurisdiction",
+            "license_expiration_date",
+
+            # -----------------------------------------
+            # Credential information
+            # -----------------------------------------
+
+            "credential_type",
+            "credential_number",
+
+            # -----------------------------------------
+            # Insurance information
+            # -----------------------------------------
+
+            "insurance_provider",
+            "policy_number",
+            "insurance_expiration_date",
+            "coverage_limit",
+
+            # -----------------------------------------
+            # Education information
+            # -----------------------------------------
+
+            "degree",
+            "institution",
+            "field_of_study",
+            "graduation_year",
+
+            # -----------------------------------------
+            # Documents
+            # -----------------------------------------
+
+            "license_document",
+            "credential_document",
+            "insurance_document",
+            "degree_document",
         ]
 
     def validate(self, data):
+
+        # -----------------------------------------
+        # Password confirmation
+        # -----------------------------------------
+
         if data["password"] != data["confirm_password"]:
-            raise serializers.ValidationError({"confirm_password": "Passwords do not match."})
+            raise serializers.ValidationError({
+                "confirm_password": "Passwords do not match."
+            })
 
-        if data["role"] not in ["nutritionist", "vendor"]:
-            raise serializers.ValidationError({"role": "Role must be nutritionist or vendor."})
+        # -----------------------------------------
+        # Role validation
+        # -----------------------------------------
 
-        if User.objects.filter(email=data["email"]).exists():
-            raise serializers.ValidationError({"email": "This email is already registered."})
+        if data["role"] not in [
+            "nutritionist",
+            "vendor",
+        ]:
+            raise serializers.ValidationError({
+                "role": "Role must be nutritionist or vendor."
+            })
 
-        if StaffApplication.objects.filter(email=data["email"], status="pending").exists():
-            raise serializers.ValidationError({"email": "An application with this email is already pending."})
+        # -----------------------------------------
+        # Existing user check
+        # -----------------------------------------
+
+        if User.objects.filter(
+            email=data["email"]
+        ).exists():
+            raise serializers.ValidationError({
+                "email": "This email is already registered."
+            })
+
+        # -----------------------------------------
+        # Existing pending application
+        # -----------------------------------------
+
+        if StaffApplication.objects.filter(
+            email=data["email"],
+            status="pending"
+        ).exists():
+            raise serializers.ValidationError({
+                "email": (
+                    "An application with this email "
+                    "is already pending."
+                )
+            })
 
         return data
 
     def create(self, validated_data):
+
+        # Remove confirm_password
         validated_data.pop("confirm_password")
+
+        # Hash password
         password = validated_data.pop("password")
-        validated_data["password"] = make_password(password)
-        return StaffApplication.objects.create(**validated_data)
+
+        validated_data["password"] = make_password(
+            password
+        )
+
+        return StaffApplication.objects.create(
+            **validated_data
+        )
 
 
-class StaffApplicationListSerializer(serializers.ModelSerializer):
-    """For admin to view pending applications."""
+# ============================================================
+# STAFF APPLICATION LIST SERIALIZER
+# ADMIN
+# ============================================================
+
+class StaffApplicationListSerializer(
+    serializers.ModelSerializer
+):
+    """
+    Serializer used by admin to view staff applications.
+    """
 
     class Meta:
         model = StaffApplication
+
         fields = [
-            "id", "full_name", "email", "phone", "role", "application_data",
-            "license_document", "credential_document", "insurance_document", "degree_document",
-            "status", "created_at",
+
+            "id",
+
+            # -----------------------------------------
+            # Basic information
+            # -----------------------------------------
+
+            "full_name",
+            "email",
+            "phone",
+            "role",
+
+            # -----------------------------------------
+            # Professional information
+            # -----------------------------------------
+
+            "current_role",
+            "specialization",
+            "years_of_experience",
+
+            # -----------------------------------------
+            # License information
+            # -----------------------------------------
+
+            "license_number",
+            "license_jurisdiction",
+            "license_expiration_date",
+
+            # -----------------------------------------
+            # Credential information
+            # -----------------------------------------
+
+            "credential_type",
+            "credential_number",
+
+            # -----------------------------------------
+            # Insurance information
+            # -----------------------------------------
+
+            "insurance_provider",
+            "policy_number",
+            "insurance_expiration_date",
+            "coverage_limit",
+
+            # -----------------------------------------
+            # Education information
+            # -----------------------------------------
+
+            "degree",
+            "institution",
+            "field_of_study",
+            "graduation_year",
+
+            # -----------------------------------------
+            # Documents
+            # -----------------------------------------
+
+            "license_document",
+            "credential_document",
+            "insurance_document",
+            "degree_document",
+
+            # -----------------------------------------
+            # Application status
+            # -----------------------------------------
+
+            "status",
+            "created_at",
+            "reviewed_at",
+            "reviewed_by",
         ]
 
-# ---------------------------
-# Self-service profile & password management
-# ---------------------------
 
-class UpdateProfileSerializer(serializers.ModelSerializer):
+# ============================================================
+# UPDATE PROFILE
+# ============================================================
+
+class UpdateProfileSerializer(
+    serializers.ModelSerializer
+):
     """
-    Lets a logged-in user update their own basic profile fields.
-    Email is deliberately excluded — it's the login identifier (USERNAME_FIELD),
-    so changing it needs its own OTP-verified flow, not a plain field edit.
+    Allows a logged-in user to update their
+    basic profile information.
     """
 
     class Meta:
         model = User
-        fields = ["full_name", "phone", "profile_picture"]
+
+        fields = [
+            "full_name",
+            "phone",
+            "profile_picture",
+        ]
 
     def validate_phone(self, value):
-        if value and User.objects.exclude(id=self.instance.id).filter(phone=value).exists():
-            raise serializers.ValidationError("This phone number is already in use.")
+
+        if value and User.objects.exclude(
+            id=self.instance.id
+        ).filter(
+            phone=value
+        ).exists():
+
+            raise serializers.ValidationError(
+                "This phone number is already in use."
+            )
+
         return value
 
 
-class ChangePasswordSerializer(serializers.Serializer):
-    current_password = serializers.CharField(write_only=True)
-    new_password = serializers.CharField(write_only=True, min_length=8)
-    confirm_new_password = serializers.CharField(write_only=True)
+# ============================================================
+# CHANGE PASSWORD
+# ============================================================
+
+class ChangePasswordSerializer(
+    serializers.Serializer
+):
+
+    current_password = serializers.CharField(
+        write_only=True
+    )
+
+    new_password = serializers.CharField(
+        write_only=True,
+        min_length=8
+    )
+
+    confirm_new_password = serializers.CharField(
+        write_only=True
+    )
 
     def validate(self, data):
+
         if data["new_password"] != data["confirm_new_password"]:
-            raise serializers.ValidationError({"confirm_new_password": "Passwords do not match."})
+            raise serializers.ValidationError({
+                "confirm_new_password": (
+                    "Passwords do not match."
+                )
+            })
+
         return data
