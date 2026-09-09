@@ -505,39 +505,122 @@ class VerifyEmailOTPView(APIView):
 
 
 class ResetPasswordView(APIView):
-    """Final step of forgot-password / first-time password setup for approved staff."""
+    """Final step of forgot-password for email or phone."""
 
     def post(self, request):
         serializer = ResetPasswordSerializer(data=request.data)
 
         if not serializer.is_valid():
-            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
-        email = serializer.validated_data["email"]
-        new_password = serializer.validated_data["new_password"]
-
-        verified_otp = OTPVerification.objects.filter(
-            email=email, purpose="password_reset", is_verified=True
-        ).order_by("-verified_at").first()
-
-        if not verified_otp or verified_otp.verified_at < timezone.now() - timedelta(minutes=15):
             return Response(
-                {"detail": "Please verify OTP again before resetting password."},
+                serializer.errors,
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-        user = User.objects.filter(email=email).first()
-        if not user:
-            return Response({"detail": "No account found with this email."}, status=status.HTTP_404_NOT_FOUND)
+        email = serializer.validated_data.get("email")
+        phone = serializer.validated_data.get("phone")
+        new_password = serializer.validated_data["new_password"]
+
+        # ----------------------------------
+        # Find the verified OTP
+        # ----------------------------------
+
+        if email:
+            verified_otp = OTPVerification.objects.filter(
+                email=email,
+                channel="email",
+                purpose="password_reset",
+                is_verified=True
+            ).order_by("-verified_at").first()
+
+        else:
+            verified_otp = OTPVerification.objects.filter(
+                phone=phone,
+                channel="phone",
+                purpose="password_reset",
+                is_verified=True
+            ).order_by("-verified_at").first()
+
+        # ----------------------------------
+        # Check OTP verification + expiry
+        # ----------------------------------
+
+        if not verified_otp:
+            return Response(
+                {
+                    "detail": "Please verify OTP before resetting your password."
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        if verified_otp.verified_at < timezone.now() - timedelta(minutes=15):
+            return Response(
+                {
+                    "detail": "OTP verification has expired. Please verify again."
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # ----------------------------------
+        # Find existing user
+        # ----------------------------------
+
+        if email:
+            user = User.objects.filter(
+                email=email,
+                is_active=True
+            ).first()
+
+            if not user:
+                return Response(
+                    {
+                        "detail": "No active account found with this email."
+                    },
+                    status=status.HTTP_404_NOT_FOUND
+                )
+
+        else:
+            user = User.objects.filter(
+                phone=phone,
+                is_active=True
+            ).first()
+
+            if not user:
+                return Response(
+                    {
+                        "detail": "No active account found with this phone number."
+                    },
+                    status=status.HTTP_404_NOT_FOUND
+                )
+
+        # ----------------------------------
+        # Reset password
+        # ----------------------------------
 
         user.set_password(new_password)
-        user.token_version += 1   # revoke all old tokens
-        user.save(update_fields=["password", "token_version"])
-        user.save()
+
+        # Increment token version
+        # This invalidates previously issued tokens
+        user.token_version += 1
+
+        user.save(
+            update_fields=[
+                "password",
+                "token_version"
+            ]
+        )
+
+        # ----------------------------------
+        # Delete used OTP
+        # ----------------------------------
+
         verified_otp.delete()
 
-        return Response({"message": "Password reset successful."}, status=status.HTTP_200_OK)
-
+        return Response(
+            {
+                "message": "Password reset successful."
+            },
+            status=status.HTTP_200_OK
+        )
 
 # ---------------------------
 # Staff applications — vendor/nutritionist (website), admin review

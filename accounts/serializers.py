@@ -390,7 +390,17 @@ class VerifyEmailOTPSerializer(serializers.Serializer):
 
 class ResetPasswordSerializer(serializers.Serializer):
 
-    email = serializers.EmailField()
+    email = serializers.EmailField(
+        required=False,
+        allow_null=True,
+        allow_blank=True
+    )
+
+    phone = serializers.CharField(
+        required=False,
+        allow_null=True,
+        allow_blank=True
+    )
 
     new_password = serializers.CharField(
         write_only=True,
@@ -408,8 +418,17 @@ class ResetPasswordSerializer(serializers.Serializer):
                 "confirm_new_password": "Passwords do not match."
             })
 
-        return data
+        if not data.get("email") and not data.get("phone"):
+            raise serializers.ValidationError({
+                "detail": "Email or phone is required."
+            })
 
+        if data.get("email") and data.get("phone"):
+            raise serializers.ValidationError({
+                "detail": "Provide either email or phone, not both."
+            })
+
+        return data
 
 # ============================================================
 # STAFF APPLICATION SERIALIZER
