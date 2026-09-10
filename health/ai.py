@@ -1,7 +1,8 @@
 """
 AI nutrition suggestion generator for Megeb+.
 
-Uses today's real health data to generate one short personalized tip.
+Uses a user's real logged health data for a given day (today by
+default) to generate one short personalized tip.
 Falls back safely if Gemini is unavailable.
 """
 
@@ -25,12 +26,17 @@ FALLBACK_MESSAGE_EMPTY = (
 )
 
 
-def _gather_today_summary(user):
-    today = timezone.localdate()
+def _gather_day_summary(user, target_date):
+    """
+    Same data-gathering this used to do for "today" only, now for
+    whatever calendar day the caller asks about. `target_date` is
+    required (callers should resolve "no date given" to today
+    themselves) so this function has no hidden default of its own.
+    """
 
     food_entries = FoodEntry.objects.filter(
         user=user,
-        date=today,
+        date=target_date,
     )
 
     calories_consumed = sum(
@@ -43,12 +49,17 @@ def _gather_today_summary(user):
         Decimal("0"),
     )
 
+    # WaterLog now has its own writable `date` field (previously this
+    # filtered on logged_at__date, which broke as soon as water could
+    # be logged retroactively for a day other than when the request
+    # was made). Falls back to logged_at__date for any legacy rows
+    # created before the `date` field existed and left null.
     water_ml = sum(
         (
             log.amount_ml
             for log in WaterLog.objects.filter(
                 user=user,
-                logged_at__date=today,
+                date=target_date,
             )
         ),
         0,
@@ -59,7 +70,7 @@ def _gather_today_summary(user):
             log.duration_minutes
             for log in ExerciseLog.objects.filter(
                 user=user,
-                date=today,
+                date=target_date,
             )
         ),
         0,
@@ -92,7 +103,7 @@ def _gather_today_summary(user):
 
 def _build_prompt(summary):
     calorie_line = (
-        f"Calories today: {summary['calories_consumed']:.0f}"
+        f"Calories logged: {summary['calories_consumed']:.0f}"
     )
 
     if summary["calorie_target"]:
@@ -101,7 +112,7 @@ def _build_prompt(summary):
         )
 
     protein_line = (
-        f"Protein today: {summary['protein_consumed']:.0f}g"
+        f"Protein logged: {summary['protein_consumed']:.0f}g"
     )
 
     if summary["protein_target"]:
@@ -110,7 +121,7 @@ def _build_prompt(summary):
         )
 
     water_line = (
-        f"Water today: {summary['water_ml']}ml"
+        f"Water logged: {summary['water_ml']}ml"
     )
 
     if summary["water_target_glasses"]:
@@ -125,8 +136,9 @@ def _build_prompt(summary):
 
     return (
         "You are a friendly nutrition coach inside a health app.\n"
-        "Based on this user's health data for today, write ONE "
-        "short, warm, actionable nutrition or activity tip.\n\n"
+        "Based on this user's logged health data for the day below, "
+        "write ONE short, warm, actionable nutrition or activity "
+        "tip.\n\n"
         "Rules:\n"
         "- Maximum 25 words.\n"
         "- No medical claims.\n"
@@ -136,7 +148,7 @@ def _build_prompt(summary):
         f"{calorie_line}\n"
         f"{protein_line}\n"
         f"{water_line}\n"
-        f"Activity today: {summary['activity_minutes']} minutes\n"
+        f"Activity logged: {summary['activity_minutes']} minutes\n"
         f"{goal_line}"
     )
 
@@ -168,14 +180,18 @@ def _clean_ai_text(text):
     return text
 
 
-def generate_ai_suggestion(user):
+def generate_ai_suggestion(user, target_date=None):
     """
-    Generate a personalized AI suggestion for today's health data.
+    Generate a personalized AI suggestion for the given day's health
+    data. `target_date` defaults to today (server-side) when omitted,
+    so every existing caller that calls generate_ai_suggestion(user)
+    keeps working unchanged.
 
     Returns a safe fallback message if Gemini is unavailable.
     """
 
-    summary = _gather_today_summary(user)
+    target_date = target_date or timezone.localdate()
+    summary = _gather_day_summary(user, target_date)
 
     # Don't call Gemini if the user has no data.
     if not summary["has_logged_anything"]:

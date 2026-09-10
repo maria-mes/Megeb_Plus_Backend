@@ -1,5 +1,5 @@
-
 from decimal import Decimal
+from datetime import date as date_cls
 
 from rest_framework import viewsets, permissions, status
 from rest_framework.decorators import action
@@ -966,16 +966,50 @@ def refresh_ai_suggestion_for_today(user):
         return None
 
 
+def _resolve_ai_suggestion_date(request):
+    """
+    Reads `date` (YYYY-MM-DD) from wherever the client put it — JSON
+    body for POST, query string for GET — and falls back to today
+    when it's absent. Returns (target_date, error_response); the
+    caller should return error_response immediately if it isn't None.
+    """
+
+    raw_date = None
+
+    if request.method == "POST":
+        raw_date = request.data.get("date")
+
+    if not raw_date:
+        raw_date = request.query_params.get("date")
+
+    if not raw_date:
+        return timezone.localdate(), None
+
+    try:
+        return date_cls.fromisoformat(str(raw_date)), None
+    except ValueError:
+        return None, Response(
+            {"detail": "date must be in YYYY-MM-DD format."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+
 class AISuggestionView(
     CamelCaseAPIMixin,
     APIView,
 ):
     """
-    Returns today's AI-generated nutrition tip.
+    Returns an AI-generated nutrition tip for a given day (today by
+    default).
 
-    Cached per user per day.
+    Accepts either:
+      GET  /ai-suggestion/?date=YYYY-MM-DD&refresh=true
+      POST /ai-suggestion/   body: {"date": "YYYY-MM-DD", "refresh": true}
 
-    ?refresh=true forces a new generation.
+    `date` is optional on both and defaults to today (server-side)
+    when omitted. Cached per user per day — pass refresh=true (query
+    param or, on POST, body field) to force a new generation instead
+    of returning the cached row for that day.
     """
 
     permission_classes = [
@@ -983,19 +1017,25 @@ class AISuggestionView(
     ]
 
     def get(self, request):
-        today = timezone.localdate()
+        return self._handle(request)
+
+    def post(self, request):
+        return self._handle(request)
+
+    def _handle(self, request):
+        target_date, error_response = _resolve_ai_suggestion_date(request)
+        if error_response is not None:
+            return error_response
 
         force_refresh = (
-            request.query_params.get(
-                "refresh"
-            )
-            == "true"
+            request.query_params.get("refresh") == "true"
+            or request.data.get("refresh") in ("true", True)
         )
 
         if not force_refresh:
             existing = AISuggestion.objects.filter(
                 user=request.user,
-                date=today,
+                date=target_date,
             ).first()
 
             if (
@@ -1010,13 +1050,14 @@ class AISuggestionView(
                 )
 
         message = generate_ai_suggestion(
-            request.user
+            request.user,
+            target_date,
         )
 
         suggestion, _ = (
             AISuggestion.objects.update_or_create(
                 user=request.user,
-                date=today,
+                date=target_date,
                 defaults={
                     "message": message,
                 },
@@ -1279,4 +1320,3 @@ class DashboardView(
 
             "upcoming_appointment": None,
         })
-

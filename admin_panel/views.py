@@ -21,12 +21,14 @@ from .permissions import IsAdminRole
 from .models import PlatformSettings
 from .serializers import (
     AdminUserSerializer,
+    AdminClientListSerializer,
+    AdminClientSerializer,
     AdminNutritionistSerializer,
     AdminAppointmentSerializer,
     PlatformSettingsSerializer,
     AdminFoodItemSerializer,
     AdminProfileSerializer,
-     AdminFoodVendorSerializer,
+    AdminFoodVendorSerializer,
 )
 
 
@@ -63,6 +65,72 @@ class AdminUserDetailView(APIView):
         user.save()
 
         return Response(AdminUserSerializer(user).data)
+
+
+# ---------------------------
+# Clients
+# ---------------------------
+
+class AdminClientListView(APIView):
+    """
+    Admin-only: list all platform clients (for the Clients page).
+
+    Matches the shape the Next.js /admin/clients page already expects
+    (see AdminClientListSerializer) — this view was missing, which broke
+    the import in admin/urls.py and took the client-side data with it.
+    """
+
+    permission_classes = [IsAdminRole]
+
+    def get(self, request):
+        clients = (
+            User.objects.filter(role="client")
+            .select_related("health_profile")
+            .order_by("-created_at")
+        )
+        return Response(AdminClientListSerializer(clients, many=True).data)
+
+
+class AdminClientDetailView(APIView):
+    """
+    Admin-only: view a single client's full profile, and
+    suspend/reactivate their account (for the Client detail page).
+    """
+
+    permission_classes = [IsAdminRole]
+
+    def get(self, request, client_id):
+        client = (
+            User.objects.filter(id=client_id, role="client")
+            .select_related("health_profile")
+            .prefetch_related(
+                "client_appointments__nutritionist",
+                "client_appointments__consultation",
+                "nutrition_goals",
+                "nutrition_plans",
+            )
+            .first()
+        )
+
+        if not client:
+            return Response({"detail": "Client not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        return Response(AdminClientSerializer(client).data)
+
+    def patch(self, request, client_id):
+        client = User.objects.filter(id=client_id, role="client").first()
+
+        if not client:
+            return Response({"detail": "Client not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        new_status = request.data.get("status")
+        if new_status not in ["Active", "Suspended"]:
+            return Response({"detail": "status must be 'Active' or 'Suspended'."}, status=status.HTTP_400_BAD_REQUEST)
+
+        client.is_active = (new_status == "Active")
+        client.save()
+
+        return Response(AdminClientSerializer(client).data)
 
 
 # ---------------------------
