@@ -23,28 +23,50 @@ class AdminUserSerializer(serializers.ModelSerializer):
 
 
 class AdminNutritionistSerializer(serializers.ModelSerializer):
-    name = serializers.CharField(source="full_name")
-    specialty = serializers.SerializerMethodField()
-    credentialType = serializers.SerializerMethodField()
-    licenseNumber = serializers.SerializerMethodField()
+    """
+    Serializer for nutritionist staff applications.
+
+    StaffApplication no longer uses application_data.
+    The application information is stored directly on the model.
+    """
+
+    name = serializers.CharField(
+        source="full_name",
+        read_only=True
+    )
+
+    specialty = serializers.CharField(
+        source="specialization",
+        read_only=True
+    )
+
+    credentialType = serializers.CharField(
+        source="credential_type",
+        read_only=True
+    )
+
+    licenseNumber = serializers.CharField(
+        source="license_number",
+        read_only=True
+    )
+
     status = serializers.SerializerMethodField()
+
     appliedDate = serializers.SerializerMethodField()
 
     class Meta:
         model = StaffApplication
-        fields = ["id", "name", "email", "specialty", "credentialType", "licenseNumber", "status", "appliedDate"]
 
-    def get_specialty(self, obj):
-        data = obj.application_data or {}
-        return data.get("specialty") or data.get("specialization") or ""
-
-    def get_credentialType(self, obj):
-        data = obj.application_data or {}
-        return data.get("credentialType") or data.get("credential_type") or data.get("degree") or ""
-
-    def get_licenseNumber(self, obj):
-        data = obj.application_data or {}
-        return data.get("licenseNumber") or data.get("license_number") or ""
+        fields = [
+            "id",
+            "name",
+            "email",
+            "specialty",
+            "credentialType",
+            "licenseNumber",
+            "status",
+            "appliedDate",
+        ]
 
     def get_status(self, obj):
         return obj.status.capitalize()
@@ -79,26 +101,50 @@ class AdminAppointmentSerializer(serializers.ModelSerializer):
             "cancelled": "Cancelled",
             "completed": "Confirmed",
         }
-        return mapping.get(obj.status, obj.status.capitalize())
+
+        return mapping.get(
+            obj.status,
+            obj.status.capitalize()
+        )
 
 
 class PlatformSettingsSerializer(serializers.ModelSerializer):
-    platformName = serializers.CharField(source="platform_name")
-    supportEmail = serializers.EmailField(source="support_email", required=False, allow_blank=True)
-    maintenanceMode = serializers.BooleanField(source="maintenance_mode")
-    emailNotifications = serializers.BooleanField(source="email_notifications")
+    platformName = serializers.CharField(
+        source="platform_name"
+    )
+
+    supportEmail = serializers.EmailField(
+        source="support_email",
+        required=False,
+        allow_blank=True
+    )
+
+    maintenanceMode = serializers.BooleanField(
+        source="maintenance_mode"
+    )
+
+    emailNotifications = serializers.BooleanField(
+        source="email_notifications"
+    )
 
     class Meta:
         model = PlatformSettings
-        fields = ["platformName", "supportEmail", "maintenanceMode", "emailNotifications"]
+        fields = [
+            "platformName",
+            "supportEmail",
+            "maintenanceMode",
+            "emailNotifications"
+        ]
 
 
 class AdminFoodItemSerializer(serializers.ModelSerializer):
     """
     Maps health.models.Food (which stores nutrition per 100g, no
     serving-size concept) onto the admin Food Database page's flat
-    FoodItem shape. `servingSize` is a fixed "100g" label rather than a
-    fabricated value, since the underlying model has no such field.
+    FoodItem shape.
+
+    `servingSize` is a fixed "100g" label rather than a fabricated value,
+    since the underlying model has no such field.
 
     coerce_to_string=False on every decimal field: DRF serializes
     DecimalField as a JSON string by default ("170.00"), but the
@@ -106,22 +152,48 @@ class AdminFoodItemSerializer(serializers.ModelSerializer):
     """
 
     calories = serializers.DecimalField(
-        source="calories_per_100g", max_digits=7, decimal_places=2, coerce_to_string=False
+        source="calories_per_100g",
+        max_digits=7,
+        decimal_places=2,
+        coerce_to_string=False
     )
+
     protein = serializers.DecimalField(
-        source="protein_g", max_digits=6, decimal_places=2, coerce_to_string=False
+        source="protein_g",
+        max_digits=6,
+        decimal_places=2,
+        coerce_to_string=False
     )
+
     carbs = serializers.DecimalField(
-        source="carbs_g", max_digits=6, decimal_places=2, coerce_to_string=False
+        source="carbs_g",
+        max_digits=6,
+        decimal_places=2,
+        coerce_to_string=False
     )
+
     fat = serializers.DecimalField(
-        source="fat_g", max_digits=6, decimal_places=2, coerce_to_string=False
+        source="fat_g",
+        max_digits=6,
+        decimal_places=2,
+        coerce_to_string=False
     )
+
     servingSize = serializers.SerializerMethodField()
 
     class Meta:
         model = Food
-        fields = ["id", "name", "category", "calories", "protein", "carbs", "fat", "servingSize"]
+
+        fields = [
+            "id",
+            "name",
+            "category",
+            "calories",
+            "protein",
+            "carbs",
+            "fat",
+            "servingSize"
+        ]
 
     def get_servingSize(self, obj):
         return "100g"
@@ -129,43 +201,87 @@ class AdminFoodItemSerializer(serializers.ModelSerializer):
 
 class AdminProfileSerializer(serializers.ModelSerializer):
     """
-    For the admin's own /admin/profile page. `role` is presented as the
-    human label the frontend already shows ("System Administrator")
-    rather than the raw "admin" choice value.
+    For the admin's own /admin/profile page.
+
+    `role` is presented as the human label the frontend already shows
+    ("System Administrator") rather than the raw "admin" choice value.
     """
 
-    fullName = serializers.CharField(source="full_name")
+    fullName = serializers.CharField(
+        source="full_name"
+    )
+
     joinedDate = serializers.SerializerMethodField()
+
     role = serializers.SerializerMethodField()
 
     class Meta:
         model = User
-        fields = ["fullName", "email", "phone", "role", "joinedDate"]
+
+        fields = [
+            "fullName",
+            "email",
+            "phone",
+            "role",
+            "joinedDate"
+        ]
 
     def get_joinedDate(self, obj):
         return obj.created_at.strftime("%Y-%m-%d")
 
     def get_role(self, obj):
-        return "System Administrator" if obj.role == "admin" else obj.role.capitalize()
+        return (
+            "System Administrator"
+            if obj.role == "admin"
+            else obj.role.capitalize()
+        )
+
+
 class AdminFoodVendorSerializer(serializers.ModelSerializer):
-    id = serializers.IntegerField(read_only=True)
-    businessName = serializers.CharField(source="business_name")
-    ownerName = serializers.CharField(source="user.full_name", read_only=True)
-    email = serializers.EmailField(source="user.email", read_only=True)
-    phone = serializers.CharField(source="user.phone", read_only=True)
+    id = serializers.IntegerField(
+        read_only=True
+    )
+
+    businessName = serializers.CharField(
+        source="business_name"
+    )
+
+    ownerName = serializers.CharField(
+        source="user.full_name",
+        read_only=True
+    )
+
+    email = serializers.EmailField(
+        source="user.email",
+        read_only=True
+    )
+
+    phone = serializers.CharField(
+        source="user.phone",
+        read_only=True
+    )
+
     businessLicenseNumber = serializers.CharField(
         source="license_number",
         allow_blank=True,
         required=False,
     )
+
     foodSafetyCertNumber = serializers.SerializerMethodField()
-    address = serializers.CharField(source="business_address")
+
+    address = serializers.CharField(
+        source="business_address"
+    )
+
     status = serializers.SerializerMethodField()
+
     appliedDate = serializers.SerializerMethodField()
+
     documents = serializers.SerializerMethodField()
 
     class Meta:
         model = VendorApplication
+
         fields = [
             "id",
             "businessName",
@@ -206,15 +322,29 @@ class AdminFoodVendorSerializer(serializers.ModelSerializer):
                 continue
 
             file_url = file_field.url
+
             if request:
                 file_url = request.build_absolute_uri(file_url)
 
             filename = file_field.name.split("/")[-1]
-            extension = filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
 
-            file_type = "image" if extension in {
-                "jpg", "jpeg", "png", "webp", "gif"
-            } else "pdf"
+            extension = (
+                filename.rsplit(".", 1)[-1].lower()
+                if "." in filename
+                else ""
+            )
+
+            file_type = (
+                "image"
+                if extension in {
+                    "jpg",
+                    "jpeg",
+                    "png",
+                    "webp",
+                    "gif"
+                }
+                else "pdf"
+            )
 
             documents.append({
                 "label": label,
