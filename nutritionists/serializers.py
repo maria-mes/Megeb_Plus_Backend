@@ -131,6 +131,51 @@ class NutritionistProfileSerializer(
             "created_at",
             "updated_at",
         ]
+from django.utils import timezone
+from appointments.models import NutritionistAvailability
+
+
+class NutritionistDirectorySerializer(serializers.ModelSerializer):
+    full_name = serializers.CharField(
+        source="user.full_name",
+        read_only=True
+    )
+
+    currency = serializers.SerializerMethodField()
+    availability = serializers.SerializerMethodField()
+
+    class Meta:
+        model = NutritionistProfile
+        fields = [
+            "id",
+            "full_name",
+            "specialization",
+            "bio",
+            "qualification",
+            "years_of_experience",
+            "consultation_fee",
+            "currency",
+            "rating",
+            "profile_picture",
+            "is_verified",
+            "availability",
+        ]
+
+    def get_currency(self, obj):
+        return "ETB"
+
+    def get_availability(self, obj):
+        today = timezone.localdate()
+
+        day_of_week = today.weekday()
+
+        has_availability = NutritionistAvailability.objects.filter(
+            nutritionist=obj.user,
+            day_of_week=day_of_week,
+            is_active=True,
+        ).exists()
+
+        return "available" if has_availability else "unavailable"
 class ClientNutritionPlanSerializer(serializers.ModelSerializer):
     class Meta:
         model = NutritionPlan

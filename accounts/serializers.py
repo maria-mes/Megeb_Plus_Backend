@@ -6,6 +6,8 @@ from rest_framework_simplejwt.serializers import (
     RefreshToken,
     TokenObtainPairSerializer,
 )
+from django.utils import timezone
+import json
 
 
 # ============================================================
@@ -430,6 +432,7 @@ class ResetPasswordSerializer(serializers.Serializer):
 
         return data
 
+
 # ============================================================
 # STAFF APPLICATION SERIALIZER
 # VENDOR / NUTRITIONIST
@@ -527,7 +530,119 @@ class StaffApplicationSerializer(
             "credential_document",
             "insurance_document",
             "degree_document",
+
+            # -----------------------------------------
+            # Application metadata
+            # -----------------------------------------
+
+            "submitted_at",
+            "created_at",
+            "updated_at",
+            "status",
+
+            # -----------------------------------------
+            # AI verification
+            # -----------------------------------------
+
+            "ai_status",
+            "ai_score",
+            "ai_result",
+
+            # -----------------------------------------
+            # Review information
+            # -----------------------------------------
+
+            "rejection_reason",
+            "reviewed_at",
         ]
+
+        read_only_fields = [
+            "submitted_at",
+            "created_at",
+            "updated_at",
+            "status",
+            "ai_status",
+            "ai_score",
+            "ai_result",
+            "rejection_reason",
+            "reviewed_at",
+        ]
+
+    def to_internal_value(self, data):
+        """
+        Convert the frontend's application_data JSON object
+        into the individual StaffApplication model fields.
+
+        The frontend sends application_data as a JSON string
+        inside multipart/form-data.
+        """
+
+        data = data.copy()
+
+        raw_application_data = data.get(
+            "application_data"
+        )
+
+        if not raw_application_data:
+            raise serializers.ValidationError({
+                "application_data": "This field is required."
+            })
+
+        if isinstance(raw_application_data, str):
+            try:
+                application_data = json.loads(
+                    raw_application_data
+                )
+            except json.JSONDecodeError:
+                raise serializers.ValidationError({
+                    "application_data": (
+                        "Invalid JSON. Check the JSON format."
+                    )
+                })
+        else:
+            application_data = raw_application_data
+
+        if not isinstance(application_data, dict):
+            raise serializers.ValidationError({
+                "application_data": (
+                    "Must be a JSON object."
+                )
+            })
+
+        mapping = {
+            "currentRole": "current_role",
+            "yearsOfExperience": "years_of_experience",
+            "specialization": "specialization",
+            "licenseNumber": "license_number",
+            "licenseState": "license_jurisdiction",
+            "licenseExpiration": "license_expiration_date",
+            "credentialType": "credential_type",
+            "credentialNumber": "credential_number",
+            "insuranceProvider": "insurance_provider",
+            "policyNumber": "policy_number",
+            "insuranceExpiration": "insurance_expiration_date",
+            "coverageLimit": "coverage_limit",
+            "degree": "degree",
+            "institution": "institution",
+            "fieldOfStudy": "field_of_study",
+            "graduationYear": "graduation_year",
+        }
+
+        for frontend_field, backend_field in mapping.items():
+
+            if frontend_field in application_data:
+                data[backend_field] = application_data[
+                    frontend_field
+                ]
+
+        # Remove application_data because it is not
+        # a field in the StaffApplication model.
+        data.pop(
+            "application_data",
+            None
+        )
+
+        return super().to_internal_value(data)
 
     def validate(self, data):
 
@@ -549,7 +664,9 @@ class StaffApplicationSerializer(
             "vendor",
         ]:
             raise serializers.ValidationError({
-                "role": "Role must be nutritionist or vendor."
+                "role": (
+                    "Role must be nutritionist or vendor."
+                )
             })
 
         # -----------------------------------------
@@ -560,7 +677,9 @@ class StaffApplicationSerializer(
             email=data["email"]
         ).exists():
             raise serializers.ValidationError({
-                "email": "This email is already registered."
+                "email": (
+                    "This email is already registered."
+                )
             })
 
         # -----------------------------------------
@@ -582,15 +701,32 @@ class StaffApplicationSerializer(
 
     def create(self, validated_data):
 
-        # Remove confirm_password
-        validated_data.pop("confirm_password")
+        validated_data.pop(
+            "confirm_password"
+        )
 
-        # Hash password
-        password = validated_data.pop("password")
+        password = validated_data.pop(
+            "password"
+        )
 
+        # Hash the applicant's password before storing it.
         validated_data["password"] = make_password(
             password
         )
+
+        # Initial application statuses.
+        validated_data["ai_status"] = "pending"
+        validated_data["status"] = "pending"
+
+        # Explicit timestamps.
+        #
+        # This is especially useful because your deployed
+        # database previously complained that submitted_at
+        # was NULL.
+        now = timezone.now()
+
+        validated_data["submitted_at"] = now
+        validated_data["updated_at"] = now
 
         return StaffApplication.objects.create(
             **validated_data
@@ -680,7 +816,18 @@ class StaffApplicationListSerializer(
             # -----------------------------------------
 
             "status",
+            "ai_status",
+            "ai_score",
+            "ai_result",
+            "rejection_reason",
+
+            # -----------------------------------------
+            # Timestamps
+            # -----------------------------------------
+
+            "submitted_at",
             "created_at",
+            "updated_at",
             "reviewed_at",
             "reviewed_by",
         ]

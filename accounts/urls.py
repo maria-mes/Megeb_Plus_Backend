@@ -21,6 +21,7 @@ from .views import (
     ApproveApplicationView,
     RejectApplicationView,
     ChangePasswordView,
+    StaffDocumentUploadURLView
 )
 
 urlpatterns = [
@@ -87,4 +88,9 @@ urlpatterns = [
         RejectApplicationView.as_view(),
         name="reject-application",
     ),
+    path(
+    "staff-document-upload-url/",
+    StaffDocumentUploadURLView.as_view(),
+    name="staff-document-upload-url"
+),
 ]

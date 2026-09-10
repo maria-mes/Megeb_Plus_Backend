@@ -10,7 +10,11 @@ from django.core.mail import send_mail
 from django.conf import settings
 from datetime import timedelta
 from rest_framework_simplejwt.views import TokenObtainPairView
+import os
+import uuid
 
+import boto3
+from rest_framework.permissions import AllowAny
 from .models import User, OTPVerification, PendingRegistration, StaffApplication
 from .serializers import (
     RegisterSerializer,
@@ -361,7 +365,7 @@ class VerifyOTPView(APIView):
             return Response(
                 {
                     "message": "Registration complete.",
-                    "registration_complete": False,
+                    "registration_complete": True,
                     "requires_health_profile": True,
 
                     "access": str(access),
@@ -636,15 +640,23 @@ class IsAdminRole(BasePermission):
 
 
 class StaffApplyView(APIView):
-    """Vendor/nutritionist submits an application with documents. No account/password yet."""
+    """
+    Vendor/nutritionist submits an application.
 
-    parser_classes = [MultiPartParser, FormParser]
+    Documents are uploaded directly to Supabase Storage.
+    Django only receives the Supabase storage paths.
+    """
 
     def post(self, request):
-        serializer = StaffApplicationSerializer(data=request.data)
+        serializer = StaffApplicationSerializer(
+            data=request.data
+        )
 
         if not serializer.is_valid():
-            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+            return Response(
+                serializer.errors,
+                status=status.HTTP_400_BAD_REQUEST
+            )
 
         application = serializer.save()
 
@@ -652,8 +664,10 @@ class StaffApplyView(APIView):
             subject="Megeb+ Application Received",
             message=(
                 f"Hi {application.full_name},\n\n"
-                f"We've received your application to join Megeb+ as a {application.role}.\n"
-                f"Our team will review your credentials and get back to you soon."
+                f"We've received your application to join Megeb+ "
+                f"as a {application.role}.\n"
+                f"Our team will review your credentials and "
+                f"get back to you soon."
             ),
             from_email=settings.DEFAULT_FROM_EMAIL,
             recipient_list=[application.email],
@@ -662,12 +676,14 @@ class StaffApplyView(APIView):
 
         return Response(
             {
-                "message": "Application submitted. You'll be notified by email once reviewed.",
+                "message": (
+                    "Application submitted. "
+                    "You'll be notified by email once reviewed."
+                ),
                 "application_id": application.id
             },
             status=status.HTTP_201_CREATED
         )
-
 
 class PendingApplicationsView(APIView):
     """Admin-only: list applications awaiting review."""
@@ -781,3 +797,108 @@ class ChangePasswordView(APIView):
         user.save()
 
         return Response({"message": "Password changed successfully."})
+    
+class StaffDocumentUploadURLView(APIView):
+    """
+    Generate a temporary Supabase Storage upload URL
+    for a staff application document.
+    """
+    permission_classes = [AllowAny]
+    ALLOWED_TYPES = {
+        "application/pdf",
+        "image/jpeg",
+        "image/png",
+    }
+
+    MAX_FILE_SIZE = 10 * 1024 * 1024  # 10 MB
+
+    def post(self, request):
+        file_size = request.data.get("file_size")
+
+        if file_size is None:
+            return Response(
+                {"error": "file_size is required."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        try:
+            file_size = int(file_size)
+        except (TypeError, ValueError):
+            return Response(
+                {"error": "file_size must be a valid number."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        if file_size <= 0:
+            return Response(
+                {"error": "File size must be greater than 0."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        if file_size > self.MAX_FILE_SIZE:
+            return Response(
+                {
+                    "error": "File is too large.",
+                    "max_size_mb": 10
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        filename = request.data.get("filename")
+        content_type = request.data.get("content_type")
+
+        if not filename:
+            return Response(
+                {"detail": "Filename is required."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        if not content_type:
+            return Response(
+                {"detail": "Content type is required."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        if content_type not in self.ALLOWED_TYPES:
+            return Response(
+                {"detail": "Only PDF, JPG and PNG files are allowed."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        extension = os.path.splitext(filename)[1].lower()
+        allowed_extensions = {".pdf", ".jpg", ".jpeg", ".png"}
+
+        if extension not in allowed_extensions:
+            return Response(
+                {"detail": "Unsupported file extension."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        unique_name = f"{uuid.uuid4().hex}{extension}"
+        storage_path = f"applications/staff/{uuid.uuid4().hex}/{unique_name}"
+
+        s3 = boto3.client(
+            "s3",
+            endpoint_url=os.getenv("SUPABASE_S3_ENDPOINT"),
+            region_name=os.getenv("SUPABASE_S3_REGION"),
+            aws_access_key_id=os.getenv("SUPABASE_S3_ACCESS_KEY_ID"),
+            aws_secret_access_key=os.getenv("SUPABASE_S3_SECRET_ACCESS_KEY"),
+        )
+
+        upload_url = s3.generate_presigned_url(
+            "put_object",
+            Params={
+                "Bucket": os.getenv("SUPABASE_S3_BUCKET"),
+                "Key": storage_path,
+                "ContentType": content_type,
+            },
+            ExpiresIn=3600,  # 1 hour
+        )
+
+        return Response(
+            {
+                "upload_url": upload_url,
+                "storage_path": storage_path
+            },
+            status=status.HTTP_200_OK
+        )

@@ -19,7 +19,8 @@ from .serializers import (
     NutritionistApplicationSerializer,
     NutritionistProfileSerializer,
     ClientDetailSerializer,
-    ClientNoteSerializer
+    ClientNoteSerializer,
+    NutritionistDirectorySerializer
 
 )
 from nutrition_plans.permissions import IsNutritionist   # <-- add this line
@@ -402,3 +403,24 @@ class ClientNotesView(APIView):
             ClientNoteSerializer(note).data,
             status=status.HTTP_200_OK,
         )
+class NutritionistDirectoryView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        nutritionists = (
+            NutritionistProfile.objects
+            .filter(
+                user__role="nutritionist",
+                user__is_active=True,
+                is_verified=True,
+            )
+            .select_related("user")
+            .order_by("-rating", "user__full_name")
+        )
+
+        serializer = NutritionistDirectorySerializer(
+            nutritionists,
+            many=True,
+        )
+
+        return Response(serializer.data)

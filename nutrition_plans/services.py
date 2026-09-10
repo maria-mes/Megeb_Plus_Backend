@@ -1,7 +1,5 @@
 from decimal import Decimal
 
-from decimal import Decimal
-
 
 def calculate_food_nutrition(food, quantity):
     quantity = Decimal(str(quantity))
