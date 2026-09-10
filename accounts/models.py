@@ -1,3 +1,4 @@
+
 from django.contrib.auth.models import AbstractBaseUser, PermissionsMixin, BaseUserManager
 from django.db import models
 
@@ -6,16 +7,29 @@ class UserManager(BaseUserManager):
     def create_user(self, phone=None, email=None, password=None, **extra_fields):
         if not phone and not email:
             raise ValueError("Phone or email is required")
-        user = self.model(phone=phone, email=email,token_version=0, **extra_fields)
+
+        user = self.model(
+            phone=phone,
+            email=email,
+            token_version=0,
+            **extra_fields
+        )
+
         user.set_password(password)
         user.save(using=self._db)
+
         return user
 
     def create_superuser(self, phone, password=None, **extra_fields):
         extra_fields.setdefault("is_staff", True)
         extra_fields.setdefault("is_superuser", True)
         extra_fields.setdefault("is_active", True)
-        return self.create_user(phone=phone, password=password, **extra_fields)
+
+        return self.create_user(
+            phone=phone,
+            password=password,
+            **extra_fields
+        )
 
 
 class User(AbstractBaseUser, PermissionsMixin):
@@ -26,12 +40,16 @@ class User(AbstractBaseUser, PermissionsMixin):
         ("admin", "Admin"),
         ("vendor", "Vendor"),
     ]
-    
+
     id = models.BigAutoField(primary_key=True)
 
     full_name = models.CharField(max_length=255)
 
-    email = models.EmailField(unique=True, blank=True, null=True)
+    email = models.EmailField(
+        unique=True,
+        blank=True,
+        null=True
+    )
 
     phone = models.CharField(
         max_length=20,
@@ -56,9 +74,9 @@ class User(AbstractBaseUser, PermissionsMixin):
     is_active = models.BooleanField(default=True)
 
     is_staff = models.BooleanField(default=False)
-    
+
     token_version = models.PositiveIntegerField(default=0)
-    
+
     created_at = models.DateTimeField(auto_now_add=True)
 
     updated_at = models.DateTimeField(auto_now=True)
@@ -92,8 +110,16 @@ class OTPVerification(models.Model):
         default="phone"
     )
 
-    phone = models.CharField(max_length=20, null=True, blank=True)
-    email = models.EmailField(null=True, blank=True)
+    phone = models.CharField(
+        max_length=20,
+        null=True,
+        blank=True
+    )
+
+    email = models.EmailField(
+        null=True,
+        blank=True
+    )
 
     otp = models.CharField(
         max_length=6,
@@ -137,10 +163,21 @@ class OTPVerification(models.Model):
 
 
 class PendingRegistration(models.Model):
+
     full_name = models.CharField(max_length=255)
 
-    phone = models.CharField(max_length=20, unique=True, null=True, blank=True)
-    email = models.EmailField(unique=True, null=True, blank=True)
+    phone = models.CharField(
+        max_length=20,
+        unique=True,
+        null=True,
+        blank=True
+    )
+
+    email = models.EmailField(
+        unique=True,
+        null=True,
+        blank=True
+    )
 
     password = models.CharField(max_length=128)
 
@@ -163,18 +200,37 @@ class StaffApplication(models.Model):
         ("rejected", "Rejected"),
     ]
 
+    AI_STATUS_CHOICES = [
+        ("pending", "Pending"),
+        ("verified", "Verified"),
+        ("rejected", "Rejected"),
+    ]
+
+    # ------------------------------------------------------------------
+    # Basic application information
+    # ------------------------------------------------------------------
+
     full_name = models.CharField(max_length=255)
+
     email = models.EmailField(unique=True)
-    phone = models.CharField(max_length=20, null=True, blank=True)
+
+    phone = models.CharField(
+        max_length=20,
+        null=True,
+        blank=True
+    )
+
     password = models.CharField(max_length=128)
 
-    # Megeb+ application role
     role = models.CharField(
         max_length=20,
         choices=ROLE_CHOICES
     )
 
+    # ------------------------------------------------------------------
     # Professional information
+    # ------------------------------------------------------------------
+
     current_role = models.CharField(
         max_length=255,
         blank=True,
@@ -192,7 +248,10 @@ class StaffApplication(models.Model):
         blank=True
     )
 
+    # ------------------------------------------------------------------
     # License information
+    # ------------------------------------------------------------------
+
     license_number = models.CharField(
         max_length=255,
         blank=True,
@@ -210,7 +269,10 @@ class StaffApplication(models.Model):
         blank=True
     )
 
+    # ------------------------------------------------------------------
     # Credential information
+    # ------------------------------------------------------------------
+
     credential_type = models.CharField(
         max_length=255,
         blank=True,
@@ -223,7 +285,10 @@ class StaffApplication(models.Model):
         default=""
     )
 
+    # ------------------------------------------------------------------
     # Insurance information
+    # ------------------------------------------------------------------
+
     insurance_provider = models.CharField(
         max_length=255,
         blank=True,
@@ -248,7 +313,10 @@ class StaffApplication(models.Model):
         blank=True
     )
 
+    # ------------------------------------------------------------------
     # Education
+    # ------------------------------------------------------------------
+
     degree = models.CharField(
         max_length=255,
         blank=True,
@@ -272,7 +340,10 @@ class StaffApplication(models.Model):
         blank=True
     )
 
-    # Documents
+    # ------------------------------------------------------------------
+    # Uploaded documents
+    # ------------------------------------------------------------------
+
     license_document = models.FileField(
         upload_to="applications/licenses/",
         null=True,
@@ -297,13 +368,20 @@ class StaffApplication(models.Model):
         blank=True
     )
 
+    # ------------------------------------------------------------------
+    # Human/admin review status
+    # ------------------------------------------------------------------
+
     status = models.CharField(
         max_length=10,
         choices=STATUS_CHOICES,
         default="pending"
     )
 
-    created_at = models.DateTimeField(auto_now_add=True)
+    rejection_reason = models.TextField(
+        null=True,
+        blank=True
+    )
 
     reviewed_at = models.DateTimeField(
         null=True,
@@ -316,6 +394,40 @@ class StaffApplication(models.Model):
         blank=True,
         on_delete=models.SET_NULL,
         related_name="reviewed_applications"
+    )
+
+    # ------------------------------------------------------------------
+    # AI verification
+    # ------------------------------------------------------------------
+
+    ai_status = models.CharField(
+        max_length=20,
+        choices=AI_STATUS_CHOICES,
+        default="pending"
+    )
+
+    ai_score = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        null=True,
+        blank=True
+    )
+
+    ai_result = models.JSONField(
+        null=True,
+        blank=True
+    )
+
+    # ------------------------------------------------------------------
+    # Timestamps
+    # ------------------------------------------------------------------
+
+    created_at = models.DateTimeField(
+        auto_now_add=True
+    )
+
+    updated_at = models.DateTimeField(
+        auto_now=True
     )
 
     def __str__(self):
