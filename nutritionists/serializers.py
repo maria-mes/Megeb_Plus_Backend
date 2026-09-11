@@ -140,7 +140,10 @@ class NutritionistDirectorySerializer(serializers.ModelSerializer):
         source="user.full_name",
         read_only=True
     )
-
+    user_id = serializers.IntegerField(
+    source="user.id",
+    read_only=True
+    )
     currency = serializers.SerializerMethodField()
     availability = serializers.SerializerMethodField()
 
@@ -148,6 +151,7 @@ class NutritionistDirectorySerializer(serializers.ModelSerializer):
         model = NutritionistProfile
         fields = [
             "id",
+            "user_id",
             "full_name",
             "specialization",
             "bio",
