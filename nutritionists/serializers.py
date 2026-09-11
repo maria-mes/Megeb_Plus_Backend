@@ -316,15 +316,16 @@ class ClientDetailSerializer(serializers.ModelSerializer):
         return float(profile.weight_kg) if profile and profile.weight_kg is not None else None
 
     def get_targetWeight(self, obj):
-        """
-        Target weight is NOT stored in HealthProfile.
+        goal = NutritionGoal.objects.filter(
+          user=obj,
+          status="active"
+       ).order_by("-created_at").first()
 
-        It should come from NutritionGoal.target_weight_kg.
+        if not goal:
+         return None
 
-        This is temporarily returning None until the exact
-        NutritionGoal relationship/model is confirmed.
-        """
-        return None
+        return float(goal.target_weight_kg)
+
 
     def get_bmi(self, obj):
         profile = self.get_health_profile(obj)
