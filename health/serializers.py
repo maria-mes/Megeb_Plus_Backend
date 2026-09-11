@@ -94,9 +94,14 @@ class NutritionGoalSerializer(serializers.ModelSerializer):
 
 
 class WaterLogSerializer(serializers.ModelSerializer):
+    # `date` is writable (defaults to today when omitted, same as
+    # WeightLogSerializer) so a user can log water for a previously
+    # selected day. `logged_at` stays read-only — it's the server
+    # audit timestamp of when the row was created, not the day the
+    # water applies to.
     class Meta:
         model = WaterLog
-        fields = ['id', 'user', 'amount_ml', 'logged_at']
+        fields = ['id', 'user', 'amount_ml', 'date', 'logged_at']
         read_only_fields = ['id', 'user', 'logged_at']
 
 

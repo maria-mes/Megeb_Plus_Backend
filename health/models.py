@@ -246,13 +246,29 @@ class WaterLog(models.Model):
         related_name="water_logs"
     )
     amount_ml = models.PositiveIntegerField()
+
+    # The calendar day this water intake applies to. Same pattern as
+    # WeightLog/ExerciseLog: writable and defaults to today, distinct
+    # from logged_at (server timestamp) — lets a user log water for a
+    # previously selected day instead of always "right now".
+    #
+    # `makemigrations` will use this default to backfill EXISTING
+    # rows to today's date, which is wrong for old entries. Follow up
+    # with a data migration that sets date = logged_at's date for any
+    # row where date == the migration's run date, e.g.:
+    #   WaterLog.objects.filter(date=<migration_run_date>).update(
+    #       date=F('logged_at__date')
+    #   )
+    # (only needed once, right after this migration is applied).
+    date = models.DateField(default=timezone.localdate)
+
     logged_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
-        ordering = ['-logged_at']
+        ordering = ['-date', '-logged_at']
 
     def __str__(self):
-        return f"{self.user.email} - {self.amount_ml}ml @ {self.logged_at}"
+        return f"{self.user.email} - {self.amount_ml}ml @ {self.date}"
 
 
 class ExerciseLog(models.Model):
@@ -311,6 +327,17 @@ class Food(models.Model):
     carbs_g = models.DecimalField(max_digits=6, decimal_places=2)
     fat_g = models.DecimalField(max_digits=6, decimal_places=2)
     fiber_g = models.DecimalField(max_digits=6, decimal_places=2, default=0)
+
+    # Photo shown on the mobile food picker and the admin Food Database
+    # page. Optional — plenty of existing catalog rows were seeded
+    # without one, so nothing downstream assumes it's always set.
+    # Requires Pillow installed and MEDIA_URL/MEDIA_ROOT configured in
+    # settings.py.
+    image = models.ImageField(
+        upload_to="foods/",
+        null=True,
+        blank=True
+    )
 
     created_at = models.DateTimeField(auto_now_add=True)
 
