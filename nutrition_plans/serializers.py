@@ -22,29 +22,24 @@ User = get_user_model()
 
 
 class FoodSerializer(serializers.ModelSerializer):
+    serving = serializers.SerializerMethodField()
+
     class Meta:
         model = Food
         fields = [
-            "id",
-            "name",
-            "category",
-            "unit_based",
-            "unit_name",
-            "grams_per_unit",
-
-            
-
-            "calories",
-            "protein",
-            "carbs",
-            "fat",
-            "fiber",
-            "is_active",
-            "created_at",
-            "updated_at",
+            "id", "name", "category",
+            "unit_based", "unit_name", "grams_per_unit",
+            "calories", "protein", "carbs", "fat", "fiber",
+            "is_active", "created_at", "updated_at",
+            "serving"
         ]
 
-    
+    def get_serving(self, obj):
+        if obj.unit_based:
+            return f"1 {obj.unit_name}"
+        return f"{obj.grams_per_unit} g"
+
+
 
 class PlanMealItemSerializer(serializers.ModelSerializer):
     food_name = serializers.CharField(
