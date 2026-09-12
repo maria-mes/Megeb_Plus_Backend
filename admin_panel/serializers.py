@@ -48,16 +48,19 @@ class AdminClientAppointmentSerializer(serializers.ModelSerializer):
     def get_nutritionist(self, obj):
         if not obj.nutritionist:
             return None
+
         return obj.nutritionist.full_name
 
     def get_date(self, obj):
         if not obj.date:
             return ""
+
         return obj.date.strftime("%Y-%m-%d")
 
     def get_time(self, obj):
         if not obj.time:
             return ""
+
         return obj.time.strftime("%I:%M %p").lstrip("0")
 
     def get_status(self, obj):
@@ -67,7 +70,11 @@ class AdminClientAppointmentSerializer(serializers.ModelSerializer):
             "cancelled": "Cancelled",
             "completed": "Completed",
         }
-        return mapping.get(obj.status, obj.status.capitalize())
+
+        return mapping.get(
+            obj.status,
+            obj.status.capitalize(),
+        )
 
 
 # ============================================================
@@ -84,21 +91,35 @@ class AdminClientListSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
         fields = [
-            "id", "name", "age", "assignedNutritionist",
-            "nextAppointment", "status",
+            "id",
+            "name",
+            "age",
+            "assignedNutritionist",
+            "nextAppointment",
+            "status",
         ]
 
     def _profile(self, obj):
         return getattr(obj, "health_profile", None)
 
     def _upcoming_appointment(self, obj):
-        appointments = getattr(obj, "client_appointments", None)
+        appointments = getattr(
+            obj,
+            "client_appointments",
+            None,
+        )
+
         if appointments is None:
             return None
+
         today = timezone.localdate()
+
         return (
             appointments
-            .filter(date__gte=today, status__in=["pending", "confirmed"])
+            .filter(
+                date__gte=today,
+                status__in=["pending", "confirmed"],
+            )
             .select_related("nutritionist")
             .order_by("date", "time")
             .first()
@@ -106,31 +127,44 @@ class AdminClientListSerializer(serializers.ModelSerializer):
 
     def get_age(self, obj):
         profile = self._profile(obj)
+
         if not profile:
             return None
+
         return profile.age
 
     def get_assignedNutritionist(self, obj):
         appointment = self._upcoming_appointment(obj)
+
         if appointment and appointment.nutritionist:
             return appointment.nutritionist.full_name
+
         return None
 
     def get_nextAppointment(self, obj):
         appointment = self._upcoming_appointment(obj)
+
         if not appointment:
             return "Not scheduled"
+
         today = timezone.localdate()
+
         if appointment.date == today:
             day_text = "Today"
+
         elif appointment.date == today + timedelta(days=1):
             day_text = "Tomorrow"
+
         else:
             day_text = (
                 f"{appointment.date.strftime('%b')} "
                 f"{appointment.date.strftime('%d').lstrip('0')}"
             )
-        time_text = appointment.time.strftime("%I:%M %p").lstrip("0")
+
+        time_text = appointment.time.strftime(
+            "%I:%M %p"
+        ).lstrip("0")
+
         return f"{day_text}, {time_text}"
 
     def get_status(self, obj):
@@ -175,222 +209,508 @@ class AdminClientSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
         fields = [
-            "id", "name", "age", "gender", "phone", "email", "status",
-            "joinedDate", "assignedNutritionist", "height", "currentWeight",
-            "targetWeight", "bmi", "goal", "goalDescription",
-            "medicalCondition", "activityLevel", "allergies",
-            "nutritionPlan", "calories", "dietType", "progress",
-            "nextAppointment", "appointments", "nutritionistNotes",
+            "id",
+            "name",
+            "age",
+            "gender",
+            "phone",
+            "email",
+            "status",
+            "joinedDate",
+            "assignedNutritionist",
+            "height",
+            "currentWeight",
+            "targetWeight",
+            "bmi",
+            "goal",
+            "goalDescription",
+            "medicalCondition",
+            "activityLevel",
+            "allergies",
+            "nutritionPlan",
+            "calories",
+            "dietType",
+            "progress",
+            "nextAppointment",
+            "appointments",
+            "nutritionistNotes",
         ]
 
     def _profile(self, obj):
         return getattr(obj, "health_profile", None)
 
     def _goals(self, obj):
-        manager = getattr(obj, "nutrition_goals", None)
+        manager = getattr(
+            obj,
+            "nutrition_goals",
+            None,
+        )
+
         if manager is None:
             return []
-        return list(manager.order_by("-created_at"))
+
+        return list(
+            manager.order_by("-created_at")
+        )
 
     def _latest_goal(self, obj):
         goals = self._goals(obj)
+
         if not goals:
             return None
-        active_goals = [g for g in goals if g.status == "active"]
-        return active_goals[0] if active_goals else goals[0]
+
+        active_goals = [
+            g
+            for g in goals
+            if g.status == "active"
+        ]
+
+        return (
+            active_goals[0]
+            if active_goals
+            else goals[0]
+        )
 
     def _plans(self, obj):
-        manager = getattr(obj, "nutrition_plans", None)
+        manager = getattr(
+            obj,
+            "nutrition_plans",
+            None,
+        )
+
         if manager is None:
             return []
-        return list(manager.order_by("-created_at"))
+
+        return list(
+            manager.order_by("-created_at")
+        )
 
     def _latest_plan(self, obj):
         plans = self._plans(obj)
+
         if not plans:
             return None
-        active_plans = [p for p in plans if p.status == "Active"]
-        return active_plans[0] if active_plans else plans[0]
+
+        active_plans = [
+            p
+            for p in plans
+            if p.status == "Active"
+        ]
+
+        return (
+            active_plans[0]
+            if active_plans
+            else plans[0]
+        )
 
     def _appointments(self, obj):
-        manager = getattr(obj, "client_appointments", None)
+        manager = getattr(
+            obj,
+            "client_appointments",
+            None,
+        )
+
         if manager is None:
             return []
-        return list(manager.select_related("nutritionist", "consultation"))
+
+        return list(
+            manager.select_related(
+                "nutritionist",
+                "consultation",
+            )
+        )
 
     def _upcoming_appointment(self, obj):
         appointments = self._appointments(obj)
         today = timezone.localdate()
+
         upcoming = [
-            a for a in appointments
-            if a.date and a.date >= today and a.status in ["pending", "confirmed"]
+            a
+            for a in appointments
+            if (
+                a.date
+                and a.date >= today
+                and a.status in [
+                    "pending",
+                    "confirmed",
+                ]
+            )
         ]
-        upcoming.sort(key=lambda a: (a.date, a.time))
-        return upcoming[0] if upcoming else None
+
+        upcoming.sort(
+            key=lambda a: (
+                a.date,
+                a.time,
+            )
+        )
+
+        return (
+            upcoming[0]
+            if upcoming
+            else None
+        )
 
     def get_age(self, obj):
         profile = self._profile(obj)
-        return profile.age if profile else None
+
+        return (
+            profile.age
+            if profile
+            else None
+        )
 
     def get_gender(self, obj):
         profile = self._profile(obj)
+
         if not profile or not profile.gender:
             return ""
+
         return profile.get_gender_display()
 
     def get_status(self, obj):
-        return "Active" if obj.is_active else "Suspended"
+        return (
+            "Active"
+            if obj.is_active
+            else "Suspended"
+        )
 
     def get_joinedDate(self, obj):
-        return obj.created_at.strftime("%Y-%m-%d")
+        return obj.created_at.strftime(
+            "%Y-%m-%d"
+        )
 
     def get_height(self, obj):
         profile = self._profile(obj)
-        if not profile or profile.height_cm is None:
+
+        if (
+            not profile
+            or profile.height_cm is None
+        ):
             return ""
+
         return f"{profile.height_cm} cm"
 
     def get_currentWeight(self, obj):
         profile = self._profile(obj)
-        if profile and profile.weight_kg is not None:
+
+        if (
+            profile
+            and profile.weight_kg is not None
+        ):
             return f"{profile.weight_kg} kg"
-        logs = list(WeightLog.objects.filter(user=obj).order_by("-date"))
+
+        logs = list(
+            WeightLog.objects
+            .filter(user=obj)
+            .order_by("-date")
+        )
+
         if logs:
             return f"{logs[0].weight_kg} kg"
+
         return ""
 
     def get_targetWeight(self, obj):
         goal = self._latest_goal(obj)
-        if goal and goal.target_weight_kg is not None:
+
+        if (
+            goal
+            and goal.target_weight_kg is not None
+        ):
             return f"{goal.target_weight_kg} kg"
+
         return ""
 
     def get_bmi(self, obj):
         profile = self._profile(obj)
-        if not profile or profile.height_cm is None or profile.weight_kg is None:
+
+        if (
+            not profile
+            or profile.height_cm is None
+            or profile.weight_kg is None
+        ):
             return ""
+
         if profile.height_cm <= 0:
             return ""
-        height_m = float(profile.height_cm) / 100
-        bmi = float(profile.weight_kg) / (height_m ** 2)
+
+        height_m = float(
+            profile.height_cm
+        ) / 100
+
+        bmi = float(
+            profile.weight_kg
+        ) / (height_m ** 2)
+
         return f"{bmi:.1f}"
 
     def get_goal(self, obj):
         profile = self._profile(obj)
-        if not profile or not profile.health_goal:
+
+        if (
+            not profile
+            or not profile.health_goal
+        ):
             return ""
+
         return profile.get_health_goal_display()
 
     def get_goalDescription(self, obj):
         profile = self._profile(obj)
+
         if not profile:
             return ""
+
         if profile.other_health_goal:
             return profile.other_health_goal
+
         if profile.health_goal:
             return profile.get_health_goal_display()
+
         return ""
 
     def get_medicalCondition(self, obj):
         profile = self._profile(obj)
-        if not profile or not profile.medical_conditions:
+
+        if (
+            not profile
+            or not profile.medical_conditions
+        ):
             return ""
+
         conditions = profile.medical_conditions
-        if isinstance(conditions, list):
-            return ", ".join(str(c) for c in conditions)
+
+        if isinstance(
+            conditions,
+            list,
+        ):
+            return ", ".join(
+                str(c)
+                for c in conditions
+            )
+
         return str(conditions)
 
     def get_activityLevel(self, obj):
         profile = self._profile(obj)
-        if not profile or not profile.activity_level:
+
+        if (
+            not profile
+            or not profile.activity_level
+        ):
             return ""
+
         return profile.get_activity_level_display()
 
     def get_allergies(self, obj):
         profile = self._profile(obj)
+
         if not profile:
             return ""
+
         values = []
+
         allergies = profile.allergies or []
-        if isinstance(allergies, list):
-            values.extend(str(a) for a in allergies)
+
+        if isinstance(
+            allergies,
+            list,
+        ):
+            values.extend(
+                str(a)
+                for a in allergies
+            )
         else:
-            values.append(str(allergies))
+            values.append(
+                str(allergies)
+            )
+
         if profile.other_allergy:
-            values.append(profile.other_allergy)
+            values.append(
+                profile.other_allergy
+            )
+
         return ", ".join(values)
 
     def get_assignedNutritionist(self, obj):
         appointment = self._upcoming_appointment(obj)
-        if appointment and appointment.nutritionist:
-            return appointment.nutritionist.full_name
+
+        if (
+            appointment
+            and appointment.nutritionist
+        ):
+            return (
+                appointment.nutritionist.full_name
+            )
+
         plan = self._latest_plan(obj)
-        if plan and plan.nutritionist:
-            return plan.nutritionist.full_name
+
+        if (
+            plan
+            and plan.nutritionist
+        ):
+            return (
+                plan.nutritionist.full_name
+            )
+
         return None
 
     def get_nutritionPlan(self, obj):
         plan = self._latest_plan(obj)
-        return plan.plan_name if plan else ""
+
+        return (
+            plan.plan_name
+            if plan
+            else ""
+        )
 
     def get_calories(self, obj):
         plan = self._latest_plan(obj)
-        if plan and plan.target_calories is not None:
-            return f"{plan.target_calories} kcal/day"
+
+        if (
+            plan
+            and plan.target_calories is not None
+        ):
+            return (
+                f"{plan.target_calories} kcal/day"
+            )
+
         profile = self._profile(obj)
-        if profile and profile.calorie_target is not None:
-            return f"{profile.calorie_target} kcal/day"
+
+        if (
+            profile
+            and profile.calorie_target is not None
+        ):
+            return (
+                f"{profile.calorie_target} kcal/day"
+            )
+
         return ""
 
     def get_dietType(self, obj):
         profile = self._profile(obj)
-        if not profile or not profile.diet_preference:
+
+        if (
+            not profile
+            or not profile.diet_preference
+        ):
             return []
-        return [profile.get_diet_preference_display()]
+
+        return [
+            profile.get_diet_preference_display()
+        ]
 
     def get_progress(self, obj):
-        logs = list(WeightLog.objects.filter(user=obj).order_by("date"))
+        logs = list(
+            WeightLog.objects
+            .filter(user=obj)
+            .order_by("date")
+        )
+
         profile = self._profile(obj)
+
         starting_weight = None
         current_weight = None
+
         if logs:
             starting_weight = logs[0].weight_kg
-        if profile and profile.weight_kg is not None:
+
+        if (
+            profile
+            and profile.weight_kg is not None
+        ):
             current_weight = profile.weight_kg
+
         elif logs:
             current_weight = logs[-1].weight_kg
+
         if starting_weight is None:
             starting_weight = current_weight
-        if starting_weight is None or current_weight is None:
-            return {"startingWeight": "", "currentWeight": "", "weightLost": ""}
-        weight_lost = float(starting_weight) - float(current_weight)
+
+        if (
+            starting_weight is None
+            or current_weight is None
+        ):
+            return {
+                "startingWeight": "",
+                "currentWeight": "",
+                "weightLost": "",
+            }
+
+        weight_lost = (
+            float(starting_weight)
+            - float(current_weight)
+        )
+
         return {
-            "startingWeight": f"{starting_weight} kg",
-            "currentWeight": f"{current_weight} kg",
-            "weightLost": f"{weight_lost:.1f} kg",
+            "startingWeight": (
+                f"{starting_weight} kg"
+            ),
+            "currentWeight": (
+                f"{current_weight} kg"
+            ),
+            "weightLost": (
+                f"{weight_lost:.1f} kg"
+            ),
         }
 
     def get_nextAppointment(self, obj):
         appointment = self._upcoming_appointment(obj)
+
         if not appointment:
             return None
+
         return {
-            "date": appointment.date.strftime("%Y-%m-%d"),
-            "time": appointment.time.strftime("%I:%M %p").lstrip("0"),
+            "date": appointment.date.strftime(
+                "%Y-%m-%d"
+            ),
+            "time": appointment.time.strftime(
+                "%I:%M %p"
+            ).lstrip("0"),
         }
 
     def get_appointments(self, obj):
         appointments = self._appointments(obj)
-        appointments.sort(key=lambda a: (a.date, a.time), reverse=True)
-        return AdminClientAppointmentSerializer(appointments, many=True).data
+
+        appointments.sort(
+            key=lambda a: (
+                a.date,
+                a.time,
+            ),
+            reverse=True,
+        )
+
+        return AdminClientAppointmentSerializer(
+            appointments,
+            many=True,
+        ).data
 
     def get_nutritionistNotes(self, obj):
         appointments = self._appointments(obj)
-        appointments.sort(key=lambda a: (a.date, a.time), reverse=True)
+
+        appointments.sort(
+            key=lambda a: (
+                a.date,
+                a.time,
+            ),
+            reverse=True,
+        )
+
         for appointment in appointments:
-            consultation = getattr(appointment, "consultation", None)
-            if consultation and consultation.nutritionist_notes:
-                return consultation.nutritionist_notes
+            consultation = getattr(
+                appointment,
+                "consultation",
+                None,
+            )
+
+            if (
+                consultation
+                and consultation.nutritionist_notes
+            ):
+                return (
+                    consultation.nutritionist_notes
+                )
+
         return ""
 
 
@@ -399,25 +719,266 @@ class AdminClientSerializer(serializers.ModelSerializer):
 # ============================================================
 
 class AdminNutritionistSerializer(serializers.ModelSerializer):
-    name = serializers.CharField(source="full_name", read_only=True)
-    specialty = serializers.CharField(source="specialization", read_only=True)
-    credentialType = serializers.CharField(source="credential_type", read_only=True)
-    licenseNumber = serializers.CharField(source="license_number", read_only=True)
-    status = serializers.SerializerMethodField()
+    """
+    Serializer for nutritionist staff applications.
+
+    Converts the StaffApplication database fields into the
+    camelCase structure expected by the admin frontend.
+    """
+
+    id = serializers.IntegerField(
+        read_only=True
+    )
+
+    fullName = serializers.CharField(
+        source="full_name",
+        read_only=True
+    )
+
+    name = serializers.CharField(
+        source="full_name",
+        read_only=True
+    )
+
+    email = serializers.EmailField(
+        read_only=True
+    )
+
+    phone = serializers.CharField(
+        read_only=True,
+        allow_null=True
+    )
+
+    currentRole = serializers.CharField(
+        source="current_role",
+        read_only=True
+    )
+
+    specialty = serializers.CharField(
+        source="specialization",
+        read_only=True
+    )
+
+    specialization = serializers.CharField(
+        read_only=True
+    )
+
+    yearsOfExperience = serializers.IntegerField(
+        source="years_of_experience",
+        read_only=True,
+        allow_null=True
+    )
+
+    licenseNumber = serializers.CharField(
+        source="license_number",
+        read_only=True
+    )
+
+    licenseState = serializers.CharField(
+        source="license_jurisdiction",
+        read_only=True
+    )
+
+    licenseExpiration = serializers.DateField(
+        source="license_expiration_date",
+        read_only=True,
+        allow_null=True
+    )
+
+    credentialType = serializers.CharField(
+        source="credential_type",
+        read_only=True
+    )
+
+    credentialNumber = serializers.CharField(
+        source="credential_number",
+        read_only=True
+    )
+
+    insuranceProvider = serializers.CharField(
+        source="insurance_provider",
+        read_only=True
+    )
+
+    policyNumber = serializers.CharField(
+        source="policy_number",
+        read_only=True
+    )
+
+    insuranceExpiration = serializers.DateField(
+        source="insurance_expiration_date",
+        read_only=True,
+        allow_null=True
+    )
+
+    coverageLimit = serializers.DecimalField(
+        source="coverage_limit",
+        max_digits=15,
+        decimal_places=2,
+        read_only=True,
+        allow_null=True
+    )
+
+    degree = serializers.CharField(
+        read_only=True
+    )
+
+    institution = serializers.CharField(
+        read_only=True
+    )
+
+    fieldOfStudy = serializers.CharField(
+        source="field_of_study",
+        read_only=True
+    )
+
+    graduationYear = serializers.IntegerField(
+        source="graduation_year",
+        read_only=True,
+        allow_null=True
+    )
+
+    submitted = serializers.SerializerMethodField()
+
     appliedDate = serializers.SerializerMethodField()
+
+    status = serializers.SerializerMethodField()
+
+    rejectionReason = serializers.CharField(
+        source="rejection_reason",
+        read_only=True,
+        allow_null=True
+    )
+
+    documents = serializers.SerializerMethodField()
+
+    aiStatus = serializers.CharField(
+        source="ai_status",
+        read_only=True
+    )
+
+    aiScore = serializers.DecimalField(
+        source="ai_score",
+        max_digits=5,
+        decimal_places=2,
+        read_only=True,
+        allow_null=True
+    )
 
     class Meta:
         model = StaffApplication
+
         fields = [
-            "id", "name", "email", "specialty", "credentialType",
-            "licenseNumber", "status", "appliedDate",
+            "id",
+
+            # Basic information
+            "fullName",
+            "name",
+            "email",
+            "phone",
+
+            # Professional information
+            "currentRole",
+            "specialty",
+            "specialization",
+            "yearsOfExperience",
+
+            # License
+            "licenseNumber",
+            "licenseState",
+            "licenseExpiration",
+
+            # Credential
+            "credentialType",
+            "credentialNumber",
+
+            # Insurance
+            "insuranceProvider",
+            "policyNumber",
+            "insuranceExpiration",
+            "coverageLimit",
+
+            # Education
+            "degree",
+            "institution",
+            "fieldOfStudy",
+            "graduationYear",
+
+            # Application
+            "submitted",
+            "appliedDate",
+            "status",
+            "rejectionReason",
+
+            # Documents
+            "documents",
+
+            # AI verification
+            "aiStatus",
+            "aiScore",
         ]
 
     def get_status(self, obj):
+        if not obj.status:
+            return ""
+
         return obj.status.capitalize()
 
+    def get_submitted(self, obj):
+        if not obj.submitted_at:
+            return ""
+
+        return obj.submitted_at.strftime(
+            "%Y-%m-%d"
+        )
+
     def get_appliedDate(self, obj):
-        return obj.created_at.strftime("%Y-%m-%d")
+        if not obj.created_at:
+            return ""
+
+        return obj.created_at.strftime(
+            "%Y-%m-%d"
+        )
+
+    def get_documents(self, obj):
+        """
+        Return document metadata without accessing .url.
+
+        This prevents local serialization from requiring the
+        configured S3 storage backend.
+        """
+
+        documents = []
+
+        if obj.license_document:
+            documents.append({
+                "type": "license",
+                "name": "License Document",
+                "fileName": obj.license_document.name,
+            })
+
+        if obj.credential_document:
+            documents.append({
+                "type": "credential",
+                "name": "Credential Document",
+                "fileName": obj.credential_document.name,
+            })
+
+        if obj.insurance_document:
+            documents.append({
+                "type": "insurance",
+                "name": "Insurance Document",
+                "fileName": obj.insurance_document.name,
+            })
+
+        if obj.degree_document:
+            documents.append({
+                "type": "degree",
+                "name": "Degree Document",
+                "fileName": obj.degree_document.name,
+            })
+
+        return documents
 
 
 # ============================================================
@@ -425,25 +986,44 @@ class AdminNutritionistSerializer(serializers.ModelSerializer):
 # ============================================================
 
 class AdminAppointmentSerializer(serializers.ModelSerializer):
-    client = serializers.CharField(source="client.full_name")
-    nutritionist = serializers.CharField(source="nutritionist.full_name")
+    client = serializers.CharField(
+        source="client.full_name"
+    )
+
+    nutritionist = serializers.CharField(
+        source="nutritionist.full_name"
+    )
+
     date = serializers.SerializerMethodField()
     time = serializers.SerializerMethodField()
     status = serializers.SerializerMethodField()
 
     class Meta:
         model = Appointment
-        fields = ["id", "client", "nutritionist", "date", "time", "status"]
+        fields = [
+            "id",
+            "client",
+            "nutritionist",
+            "date",
+            "time",
+            "status",
+        ]
 
     def get_date(self, obj):
         if not obj.date:
             return ""
-        return obj.date.strftime("%Y-%m-%d")
+
+        return obj.date.strftime(
+            "%Y-%m-%d"
+        )
 
     def get_time(self, obj):
         if not obj.time:
             return ""
-        return obj.time.strftime("%I:%M %p").lstrip("0")
+
+        return obj.time.strftime(
+            "%I:%M %p"
+        ).lstrip("0")
 
     def get_status(self, obj):
         mapping = {
@@ -452,7 +1032,11 @@ class AdminAppointmentSerializer(serializers.ModelSerializer):
             "cancelled": "Cancelled",
             "completed": "Confirmed",
         }
-        return mapping.get(obj.status, obj.status.capitalize())
+
+        return mapping.get(
+            obj.status,
+            obj.status.capitalize(),
+        )
 
 
 # ============================================================
@@ -482,68 +1066,72 @@ class AdminFoodItemSerializer(serializers.ModelSerializer):
 class AdminProfileSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
-        fields = ["id", "full_name", "email", "phone", "role", "is_active"]
-        read_only_fields = ["id", "role", "is_active"]
+        fields = [
+            "id",
+            "full_name",
+            "email",
+            "phone",
+            "role",
+            "is_active",
+        ]
+
+        read_only_fields = [
+            "id",
+            "role",
+            "is_active",
+        ]
 
 
 # ============================================================
 # FOOD VENDORS
-#
-# FIX: rewritten from `fields = "__all__"` (which only pulled
-# columns that live directly on VendorApplication, silently
-# dropping email/phone which live on the related User) to an
-# explicit serializer that outputs exactly the shape
-# app/(admin)/food-vendors/page.tsx expects: camelCase field
-# names, capitalized status, and a documents[] array.
-#
-# NOTE: I don't have DocumentPreviewModal / the SubmittedDocument
-# type, so `documents` below assumes {label, fileName, fileUrl}.
-# If the modal expects different keys, tell me and I'll adjust.
 # ============================================================
 
 class AdminFoodVendorSerializer(serializers.ModelSerializer):
 
     businessName = serializers.CharField(
-        source="business_name", read_only=True
+        source="business_name",
+        read_only=True
     )
 
     ownerName = serializers.CharField(
-        source="user.full_name", read_only=True
+        source="user.full_name",
+        read_only=True
     )
 
     email = serializers.EmailField(
-        source="user.email", read_only=True
+        source="user.email",
+        read_only=True
     )
 
     phone = serializers.CharField(
-        source="user.phone", read_only=True
+        source="user.phone",
+        read_only=True
     )
 
     address = serializers.CharField(
-        source="business_address", read_only=True
+        source="business_address",
+        read_only=True
     )
 
     businessLicenseNumber = serializers.CharField(
-        source="license_number", read_only=True
+        source="license_number",
+        read_only=True
     )
 
-    # NOTE: VendorApplication has no separate "food safety
-    # certificate number" field, only the uploaded file.
-    # Falling back to license_number would be wrong, so this
-    # returns the file name for now — add a real field on the
-    # model if you need a distinct certificate number.
     foodSafetyCertNumber = serializers.SerializerMethodField()
 
     appliedDate = serializers.SerializerMethodField()
 
     status = serializers.CharField(
-        source="get_status_display", read_only=True
+        source="get_status_display",
+        read_only=True
     )
 
     documents = serializers.SerializerMethodField()
 
     class Meta:
         model = VendorApplication
+
         fields = [
             "id",
             "businessName",
@@ -564,17 +1152,41 @@ class AdminFoodVendorSerializer(serializers.ModelSerializer):
     def get_foodSafetyCertNumber(self, obj):
         if not obj.food_safety_certificate:
             return ""
-        return obj.food_safety_certificate.name.rsplit("/", 1)[-1]
+
+        return obj.food_safety_certificate.name.rsplit(
+            "/",
+            1
+        )[-1]
 
     def get_appliedDate(self, obj):
-        return obj.created_at.strftime("%Y-%m-%d")
+        if not obj.created_at:
+            return ""
+
+        return obj.created_at.strftime(
+            "%Y-%m-%d"
+        )
 
     def _file_url(self, request, field_file):
+        """
+        Safely generate an absolute file URL.
+
+        If the configured storage backend is unavailable,
+        return None instead of crashing the entire API response.
+        """
+
         if not field_file:
             return None
-        if request:
-            return request.build_absolute_uri(field_file.url)
-        return field_file.url
+
+        try:
+            url = field_file.url
+
+            if request:
+                return request.build_absolute_uri(url)
+
+            return url
+
+        except Exception:
+            return None
 
     def get_documents(self, obj):
         request = self.context.get("request")
@@ -584,22 +1196,40 @@ class AdminFoodVendorSerializer(serializers.ModelSerializer):
         if obj.license_document:
             docs.append({
                 "label": "Business License",
-                "fileName": obj.license_document.name.rsplit("/", 1)[-1],
-                "fileUrl": self._file_url(request, obj.license_document),
+                "fileName": obj.license_document.name.rsplit(
+                    "/",
+                    1
+                )[-1],
+                "fileUrl": self._file_url(
+                    request,
+                    obj.license_document,
+                ),
             })
 
         if obj.food_safety_certificate:
             docs.append({
                 "label": "Food Safety Certificate",
-                "fileName": obj.food_safety_certificate.name.rsplit("/", 1)[-1],
-                "fileUrl": self._file_url(request, obj.food_safety_certificate),
+                "fileName": obj.food_safety_certificate.name.rsplit(
+                    "/",
+                    1
+                )[-1],
+                "fileUrl": self._file_url(
+                    request,
+                    obj.food_safety_certificate,
+                ),
             })
 
         if obj.owner_id_document:
             docs.append({
                 "label": "Owner ID",
-                "fileName": obj.owner_id_document.name.rsplit("/", 1)[-1],
-                "fileUrl": self._file_url(request, obj.owner_id_document),
+                "fileName": obj.owner_id_document.name.rsplit(
+                    "/",
+                    1
+                )[-1],
+                "fileUrl": self._file_url(
+                    request,
+                    obj.owner_id_document,
+                ),
             })
 
         return docs
