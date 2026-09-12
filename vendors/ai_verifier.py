@@ -7,8 +7,10 @@ from decimal import Decimal
 # Configuration
 # ---------------------------------------------------------------------------
 
+# FIX: added \s so license numbers containing spaces (e.g. "BL 2024 118")
+# don't get rejected outright and force a hard_fail.
 LICENSE_REGEX = re.compile(
-    r"^(LIC[-/][A-Z0-9\-\/]{3,}|[A-Z0-9\-\/]{5,})$",
+    r"^(LIC[-/][A-Z0-9\-\/\s]{3,}|[A-Z0-9\-\/\s]{5,})$",
     re.IGNORECASE,
 )
 
@@ -38,12 +40,6 @@ NEEDS_REVIEW_THRESHOLD = 50
 # ---------------------------------------------------------------------------
 
 def ocr_check(application):
-    """
-    Extract text from the vendor's documents and compare
-    the extracted information against submitted information.
-
-    Replace the placeholder OCR section with your real OCR provider.
-    """
 
     result = {
         "ran": False,
@@ -56,23 +52,13 @@ def ocr_check(application):
 
     try:
 
-        # ---------------------------------------------------------------
         # TODO: Replace this with your OCR provider.
-        #
-        # Example:
-        #
-        # from .ocr_provider import extract_text
-        # text = extract_text(application.license_document.path)
-        #
-        # ---------------------------------------------------------------
-
         text = ""
 
         details = {}
         matches = 0
         checks = 0
 
-        # License number
         if application.license_number:
 
             checks += 1
@@ -86,14 +72,12 @@ def ocr_check(application):
 
                 details["license_number_found"] = False
 
-        # Business name
         if application.business_name:
 
             checks += 1
 
             business_words = application.business_name.lower().split()
 
-            # Require at least one meaningful business-name word.
             meaningful_words = [
                 word for word in business_words
                 if len(word) >= 3
@@ -109,7 +93,6 @@ def ocr_check(application):
 
             details["business_name_found"] = name_found
 
-        # Owner name
         if application.user and application.user.full_name:
 
             checks += 1
@@ -155,12 +138,6 @@ def ocr_check(application):
 # ---------------------------------------------------------------------------
 
 def forgery_check(application):
-    """
-    Placeholder for document-forensics / tamper detection.
-
-    This should NOT automatically declare a document fraudulent
-    unless the external detector provides a sufficiently reliable signal.
-    """
 
     result = {
         "ran": False,
@@ -171,17 +148,7 @@ def forgery_check(application):
     if not application.license_document:
         return result
 
-    # ---------------------------------------------------------------
-    # TODO:
-    #
-    # signals = forensics_provider.analyze(
-    #     application.license_document.path
-    # )
-    #
-    # result["ran"] = True
-    # result["suspected"] = signals["is_manipulated"]
-    # result["details"] = signals
-    # ---------------------------------------------------------------
+    # TODO: wire up a real forensics provider.
 
     return result
 
@@ -191,12 +158,6 @@ def forgery_check(application):
 # ---------------------------------------------------------------------------
 
 def registry_check(application):
-    """
-    Placeholder for official business/license registry verification.
-
-    If an official registry becomes available, this should become
-    an authoritative verification layer.
-    """
 
     return {
         "ran": False,
@@ -232,7 +193,6 @@ def _check_completeness(app):
         if not value:
             missing.append(field)
 
-    # User information is also required.
     user = getattr(app, "user", None)
 
     if not user:
@@ -243,11 +203,10 @@ def _check_completeness(app):
         if not user.full_name:
             missing.append("owner_name")
 
-        if not user.email:
-            missing.append("email")
-
-        if not user.phone:
-            missing.append("phone")
+        # A vendor may register with either email or phone.
+        # Require at least one contact method, not both.
+        if not user.email and not user.phone:
+            missing.append("contact")
 
     return (
         len(missing) == 0,
@@ -265,40 +224,36 @@ def _check_format(app):
 
     issues = []
 
-    # License number
+    # FIX: strip + normalize before checking so incidental
+    # leading/trailing whitespace can't trigger a false failure.
+    license_number = (app.license_number or "").strip()
+
     if (
-        not app.license_number
-        or not LICENSE_REGEX.match(
-            app.license_number.strip()
-        )
+        not license_number
+        or not LICENSE_REGEX.match(license_number)
     ):
         issues.append("license_number_format")
 
-    # Business name
     if (
         not app.business_name
         or len(app.business_name.strip()) < 2
     ):
         issues.append("business_name_invalid")
 
-    # Business address
     if (
         not app.business_address
         or len(app.business_address.strip()) < 5
     ):
         issues.append("business_address_invalid")
 
-    # Business type
     if not app.business_type:
         issues.append("business_type_missing")
 
-    # Email
     if app.user and app.user.email:
 
         domain = app.user.email.split("@")[-1].lower()
 
         if domain in FREE_EMAIL_DOMAINS:
-            # Soft signal only.
             issues.append("free_email_domain")
 
     return (
@@ -318,19 +273,6 @@ def _check_format(app):
 # ---------------------------------------------------------------------------
 
 def _check_dates(app):
-
-    """
-    Vendor applications currently don't have an explicit
-    expiration-date field.
-
-    The real expiration date should eventually come from:
-        1. OCR
-        2. document metadata
-        3. official registry
-        4. manually entered expiration field
-
-    Until that exists, this layer is neutral/pass.
-    """
 
     return (
         True,
@@ -353,19 +295,13 @@ def _check_consistency(app):
 
     if user:
 
-        # Owner name must exist.
         if not user.full_name:
             issues.append("owner_name_missing")
 
-        # Email must exist.
-        if not user.email:
-            issues.append("email_missing")
+        # A vendor may have either email or phone. Only fail if both are missing.
+        if not user.email and not user.phone:
+            issues.append("contact_missing")
 
-        # Phone must exist.
-        if not user.phone:
-            issues.append("phone_missing")
-
-    # Business type must be one of the accepted choices.
     valid_types = {
         choice[0]
         for choice in app.BUSINESS_TYPE_CHOICES
@@ -437,10 +373,6 @@ def verify_application(application, persist=True):
         ),
     }
 
-    # ---------------------------------------------------------------
-    # Rule-based score
-    # ---------------------------------------------------------------
-
     rule_score = 0
 
     breakdown = {}
@@ -460,19 +392,11 @@ def verify_application(application, persist=True):
             "detail": detail,
         }
 
-    # ---------------------------------------------------------------
-    # Additional AI layers
-    # ---------------------------------------------------------------
-
     ocr = ocr_check(application)
 
     forgery = forgery_check(application)
 
     registry = registry_check(application)
-
-    # ---------------------------------------------------------------
-    # Hard failures
-    # ---------------------------------------------------------------
 
     hard_fail = False
 
@@ -486,10 +410,6 @@ def verify_application(application, persist=True):
 
     if forgery.get("suspected") is True:
         hard_fail = True
-
-    # ---------------------------------------------------------------
-    # Initial status
-    # ---------------------------------------------------------------
 
     if hard_fail:
 
@@ -506,10 +426,6 @@ def verify_application(application, persist=True):
     else:
 
         status = "failed"
-
-    # ---------------------------------------------------------------
-    # Build result
-    # ---------------------------------------------------------------
 
     result = {
 
@@ -530,10 +446,6 @@ def verify_application(application, persist=True):
         },
     }
 
-    # ---------------------------------------------------------------
-    # Optional ML layer
-    # ---------------------------------------------------------------
-
     try:
 
         from .ml_scorer import ml_score
@@ -548,7 +460,6 @@ def verify_application(application, persist=True):
 
         result["ml_score"] = ml
 
-        # Blend only if the model actually returned a score.
         final_score = int(
             round(
                 (rule_score + float(ml)) / 2
@@ -559,17 +470,12 @@ def verify_application(application, persist=True):
 
         final_score = rule_score
 
-    # Clamp score.
     final_score = max(
         0,
         min(100, final_score)
     )
 
     result["score"] = final_score
-
-    # ---------------------------------------------------------------
-    # Recalculate status AFTER final score.
-    # ---------------------------------------------------------------
 
     if hard_fail:
 
@@ -588,10 +494,6 @@ def verify_application(application, persist=True):
         final_status = "failed"
 
     result["status"] = final_status
-
-    # ---------------------------------------------------------------
-    # Persist
-    # ---------------------------------------------------------------
 
     if persist:
 

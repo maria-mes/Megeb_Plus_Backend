@@ -557,17 +557,32 @@ class AdminFoodVendorDetailView(APIView):
                 ).data
             )
 
-        # Approval requires the AI verification to have completed
-        # with an acceptable result.
-        if application.ai_status not in ["verified", "needs_review"]:
+        # ------------------------------------------------------
+        # Approval
+        #
+        # FIX: previously any ai_status other than "verified" or
+        # "needs_review" (e.g. "failed", from a false-positive
+        # regex hard_fail) permanently blocked approval with no
+        # way for the admin to override it. Now "failed" returns
+        # a 409 with requires_override so the admin can confirm
+        # and resend with overrideAi: true to approve anyway.
+        # ------------------------------------------------------
+
+        override_ai = bool(request.data.get("overrideAi"))
+
+        if application.ai_status not in ["verified", "needs_review"] and not override_ai:
             return Response(
                 {
                     "detail": (
-                        "Vendor cannot be approved until AI verification "
-                        "is completed."
-                    )
+                        "AI verification did not pass for this "
+                        "application. Confirm to override and "
+                        "approve anyway."
+                    ),
+                    "ai_status": application.ai_status,
+                    "ai_score": application.ai_score,
+                    "requires_override": True,
                 },
-                status=status.HTTP_400_BAD_REQUEST,
+                status=status.HTTP_409_CONFLICT,
             )
 
         with transaction.atomic():
@@ -611,7 +626,6 @@ class AdminFoodVendorDetailView(APIView):
                 context={"request": request},
             ).data
         )
-
 
 class AdminFoodVendorCountView(APIView):
     """Admin-only: count food vendor applications by status."""
