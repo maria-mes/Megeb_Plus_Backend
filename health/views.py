@@ -54,17 +54,39 @@ class ProfileView(CamelCaseAPIMixin, APIView):
         return profile
 
     def _serialize(self, user, profile):
-        data = {}
+       data = {}
 
-        for mobile_field, user_attr in self.USER_FIELD_MAP.items():
-            data[mobile_field] = getattr(user, user_attr, None)
+       for mobile_field, user_attr in self.USER_FIELD_MAP.items():
+         data[mobile_field] = getattr(
+            user,
+            user_attr,
+            None,
+        )
 
-        data.update(HealthProfileSerializer(profile).data)
+       data.update(
+        HealthProfileSerializer(profile).data
+    )
 
-        data.pop("id", None)
-        data.pop("user", None)
+       goal = (
+         NutritionGoal.objects
+        .filter(
+            user=user,
+            status="active",
+        )
+        .order_by("-created_at")
+        .first()
+    )
 
-        return data
+       data["target_weight"] = (
+        goal.target_weight_kg
+        if goal and goal.target_weight_kg is not None
+        else None
+    )
+
+       data.pop("id", None)
+       data.pop("user", None)
+
+       return data
 
     def get(self, request):
         profile = self._get_or_create_profile(request.user)

@@ -6,7 +6,7 @@ from .models import (
     NutritionistProfile,
     ClientNote
 )
-from health.models import HealthProfile
+from health.models import HealthProfile , NutritionGoal
 from nutrition_plans.models import NutritionPlan
 from appointments.models import Appointment
 from django.contrib.auth import get_user_model
@@ -140,14 +140,19 @@ class NutritionistDirectorySerializer(serializers.ModelSerializer):
         source="user.full_name",
         read_only=True
     )
+    user_id = serializers.IntegerField(
+    source="user.id",
+    read_only=True
+)
 
     currency = serializers.SerializerMethodField()
     availability = serializers.SerializerMethodField()
-
+    
     class Meta:
         model = NutritionistProfile
         fields = [
             "id",
+            "user_id",
             "full_name",
             "specialization",
             "bio",
@@ -165,17 +170,14 @@ class NutritionistDirectorySerializer(serializers.ModelSerializer):
         return "ETB"
 
     def get_availability(self, obj):
-        today = timezone.localdate()
+       has_availability = NutritionistAvailability.objects.filter(
+        nutritionist=obj.user,
+        is_active=True,
+       ).exists()
 
-        day_of_week = today.weekday()
-
-        has_availability = NutritionistAvailability.objects.filter(
-            nutritionist=obj.user,
-            day_of_week=day_of_week,
-            is_active=True,
-        ).exists()
-
-        return "available" if has_availability else "unavailable"
+       return "available" if has_availability else "unavailable"
+    
+    
 class ClientNutritionPlanSerializer(serializers.ModelSerializer):
     class Meta:
         model = NutritionPlan
@@ -312,15 +314,15 @@ class ClientDetailSerializer(serializers.ModelSerializer):
         return float(profile.weight_kg) if profile and profile.weight_kg is not None else None
 
     def get_targetWeight(self, obj):
-        """
-        Target weight is NOT stored in HealthProfile.
+        goal = NutritionGoal.objects.filter(
+          user=obj,
+          status="active"
+       ).order_by("-created_at").first()
 
-        It should come from NutritionGoal.target_weight_kg.
+        if not goal:
+         return None
 
-        This is temporarily returning None until the exact
-        NutritionGoal relationship/model is confirmed.
-        """
-        return None
+        return float(goal.target_weight_kg)
 
     def get_bmi(self, obj):
         profile = self.get_health_profile(obj)

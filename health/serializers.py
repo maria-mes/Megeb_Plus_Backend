@@ -25,36 +25,100 @@ from .models import (
 # just a casing change of height_cm/weight_kg.
 
 class HealthProfileSerializer(serializers.ModelSerializer):
+
     height = serializers.DecimalField(
-        source='height_cm', max_digits=5, decimal_places=2,
-        required=False, allow_null=True,
+        source='height_cm',
+        max_digits=5,
+        decimal_places=2,
+        required=False,
+        allow_null=True,
     )
+
     weight = serializers.DecimalField(
-        source='weight_kg', max_digits=5, decimal_places=2,
-        required=False, allow_null=True,
+        source='weight_kg',
+        max_digits=5,
+        decimal_places=2,
+        required=False,
+        allow_null=True,
+    )
+
+    target_weight = serializers.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        required=False,
+        allow_null=True,
+        write_only=True,
     )
 
     class Meta:
         model = HealthProfile
         fields = [
-            'id', 'user', 'age', 'gender', 'height', 'weight',
-            'activity_level', 'medical_conditions', 'allergies',
-            'other_allergy', 'diet_preference',
-            'meals_per_day', 'fasting_preference',
-            'health_goal', 'other_health_goal',
-            'calorie_target', 'protein_target_g', 'carbs_target_g',
-            'fat_target_g', 'water_target_glasses', 'water_glass_size_ml',
-            'current_streak_days', 'longest_streak_days', 'last_streak_date',
-            'created_at', 'updated_at',
+            'id',
+            'user',
+            'age',
+            'gender',
+            'height',
+            'weight',
+            'target_weight',
+            'activity_level',
+            'medical_conditions',
+            'allergies',
+            'other_allergy',
+            'diet_preference',
+            'meals_per_day',
+            'fasting_preference',
+            'health_goal',
+            'other_health_goal',
+            'calorie_target',
+            'protein_target_g',
+            'carbs_target_g',
+            'fat_target_g',
+            'water_target_glasses',
+            'water_glass_size_ml',
+            'current_streak_days',
+            'longest_streak_days',
+            'last_streak_date',
+            'created_at',
+            'updated_at',
         ]
+
         read_only_fields = [
-            'id', 'user', 'created_at', 'updated_at',
-            'calorie_target', 'protein_target_g', 'carbs_target_g',
-            'fat_target_g', 'water_target_glasses', 'water_glass_size_ml',
-            'current_streak_days', 'longest_streak_days', 'last_streak_date',
+            'id',
+            'user',
+            'created_at',
+            'updated_at',
+            'calorie_target',
+            'protein_target_g',
+            'carbs_target_g',
+            'fat_target_g',
+            'water_target_glasses',
+            'water_glass_size_ml',
+            'current_streak_days',
+            'longest_streak_days',
+            'last_streak_date',
         ]
 
+    def update(self, instance, validated_data):
+        target_weight = validated_data.pop(
+            'target_weight',
+            None,
+        )
 
+        instance = super().update(
+            instance,
+            validated_data,
+        )
+
+        if target_weight is not None:
+            NutritionGoal.objects.update_or_create(
+                user=instance.user,
+                status='active',
+                defaults={
+                    'target_weight_kg': target_weight,
+                },
+            )
+
+        return instance
 # ============================================================
 # NUTRITION GOALS  (GET /nutrition/goals/)
 # ============================================================
