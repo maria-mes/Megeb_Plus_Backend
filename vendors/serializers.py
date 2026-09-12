@@ -149,6 +149,59 @@ class VendorProfileSerializer(
         ]
 
 
+class PublicVendorSerializer(
+    serializers.ModelSerializer
+):
+    """
+    Public-facing vendor listing (for the mobile Vendors screen).
+
+    Only exposes approved/active vendors — callers are expected to
+    filter the queryset to is_verified=True, is_active=True before
+    using this serializer.
+
+    Note: VendorProfile currently has no logo/image or description
+    field, so those aren't included here. productCount is provided
+    as a lightweight signal of how much a vendor has listed.
+    """
+
+    id = serializers.IntegerField(
+        read_only=True
+    )
+
+    businessName = serializers.CharField(
+        source="business_name",
+        read_only=True,
+    )
+
+    businessType = serializers.CharField(
+        source="business_type",
+        read_only=True,
+    )
+
+    address = serializers.CharField(
+        source="business_address",
+        read_only=True,
+    )
+
+    productCount = serializers.SerializerMethodField()
+
+    class Meta:
+        model = VendorProfile
+
+        fields = [
+            "id",
+            "businessName",
+            "businessType",
+            "address",
+            "productCount",
+        ]
+
+    def get_productCount(self, obj):
+        return obj.products.filter(
+            is_active=True
+        ).count()
+
+
 class VendorRegistrationSerializer(
     serializers.Serializer
 ):
