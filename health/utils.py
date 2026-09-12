@@ -134,55 +134,55 @@ def maybe_recalculate_targets(profile):
 
 
 # --- Streaks ---
-# A day "counts" toward the streak if the user met both their calorie
-# and water goals that day. Change the definition in _day_goals_met()
-# only — check_and_update_streak() just walks the streak forward/backward
-# based on whatever that function returns, so it doesn't need to change
-# if the definition does (e.g. adding an activity requirement later).
+# A day "counts" toward the streak if the user's calorie goal was met
+# that day (some food logged, and total calories within tolerance of
+# calorie_target). Change the definition in _day_goals_met() only —
+# check_and_update_streak() just recomputes the streak by walking
+# backward from today using whatever that function returns, so it
+# doesn't need to change if the definition does (e.g. adding an
+# activity or water requirement later).
+#
+# check_and_update_streak() is safe to call on ANY request that touches
+# a user's health data — including plain GET /dashboard/ reads — because
+# it always recomputes from scratch rather than trusting a previously
+# stored value. That's what makes "no qualifying activity today -> 0"
+# and "if yesterday is missing -> reset" work correctly even if the
+# user never logs anything (they just open the dashboard).
 
 CALORIE_GOAL_TOLERANCE = 0.10  # up to 10% over calorie_target still counts as "met"
+MAX_STREAK_LOOKBACK_DAYS = 3650  # safety cap so the backward walk can't run forever
 
 
 def _day_goals_met(user, date):
     """
-    True if calorie AND water goals were both met for `date`.
+    True if the calorie goal was met for `date`: some food was logged,
+    and total calories are within tolerance of the profile's calorie_target.
     """
-    from .models import HealthProfile, FoodEntry, WaterLog  # avoid circular import
+    from .models import HealthProfile, FoodEntry  # avoid circular import
 
     profile = HealthProfile.objects.filter(user=user).first()
-    if not profile or not profile.calorie_target or not profile.water_target_glasses:
+    if not profile or not profile.calorie_target:
         return False
 
     calories_consumed = sum(
         (e.calories for e in FoodEntry.objects.filter(user=user, date=date)),
         Decimal("0"),
     )
-    calorie_met = 0 < calories_consumed <= profile.calorie_target * Decimal(str(1 + CALORIE_GOAL_TOLERANCE))
-
-    water_ml = sum(
-        (log.amount_ml for log in WaterLog.objects.filter(user=user, logged_at__date=date)),
-        0,
-    )
-    glasses_logged = round(water_ml / profile.water_glass_size_ml) if profile.water_glass_size_ml else 0
-    water_met = glasses_logged >= profile.water_target_glasses
-
-    return calorie_met and water_met
+    return 0 < calories_consumed <= profile.calorie_target * Decimal(str(1 + CALORIE_GOAL_TOLERANCE))
 
 
 def check_and_update_streak(user):
     """
-    Call after any food or water log is created, updated, or deleted.
-    Re-evaluates *today* only (cheap — no full history walk) against the
-    stored last_streak_date:
+    Recomputes the streak from scratch by walking backward from today,
+    and persists the result. Safe to call anytime — after a log change,
+    or on a plain dashboard read — since it always derives the answer
+    fresh rather than trusting the previously stored value.
 
-    - Today's goals newly met + last_streak_date was yesterday -> +1
-    - Today's goals newly met + there's a gap (or no prior streak) -> reset to 1
-    - Today's goals were met but no longer are (a log got edited/deleted) -> undo today's credit
-
-    Note: this only re-evaluates on log changes. A user who goes fully
-    inactive for a day won't have their streak reset until they next log
-    something — there's no midnight cron job. Fine for now; add one later
-    if streaks need to reset exactly at the day boundary for inactive users.
+    Rules:
+      - today's calorie goal not met -> streak = 0
+      - today's calorie goal met -> count consecutive met days walking
+        backward from today; stop at the first day that wasn't met
+        (so a missing/failed yesterday resets the count to just today = 1)
     """
     from .models import HealthProfile  # avoid circular import
 
@@ -191,22 +191,17 @@ def check_and_update_streak(user):
         return
 
     today = timezone.localdate()
-    goals_met_today = _day_goals_met(user, today)
 
-    if goals_met_today:
-        if profile.last_streak_date == today:
-            return  # already counted today
+    streak = 0
+    if _day_goals_met(user, today):
+        date = today
+        for _ in range(MAX_STREAK_LOOKBACK_DAYS):
+            if not _day_goals_met(user, date):
+                break
+            streak += 1
+            date -= timedelta(days=1)
 
-        if profile.last_streak_date == today - timedelta(days=1):
-            profile.current_streak_days += 1
-        else:
-            profile.current_streak_days = 1
-
-        profile.last_streak_date = today
-        profile.longest_streak_days = max(profile.longest_streak_days, profile.current_streak_days)
-        profile.save(update_fields=['current_streak_days', 'longest_streak_days', 'last_streak_date'])
-    else:
-        if profile.last_streak_date == today:
-            profile.current_streak_days = max(profile.current_streak_days - 1, 0)
-            profile.last_streak_date = (today - timedelta(days=1)) if profile.current_streak_days > 0 else None
-            profile.save(update_fields=['current_streak_days', 'last_streak_date'])
+    profile.current_streak_days = streak
+    profile.longest_streak_days = max(profile.longest_streak_days, streak)
+    profile.last_streak_date = today if streak else None
+    profile.save(update_fields=['current_streak_days', 'longest_streak_days', 'last_streak_date'])

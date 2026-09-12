@@ -1114,6 +1114,12 @@ class DashboardView(
 
         today = timezone.localdate()
 
+        # Recompute the streak on every dashboard read (not just on log
+        # writes) so "no qualifying activity today" correctly shows 0
+        # even if the user hasn't logged anything today — see
+        # health/utils.py check_and_update_streak() for the fixed logic.
+        check_and_update_streak(user)
+
         profile = HealthProfile.objects.filter(
             user=user
         ).first()
@@ -1259,6 +1265,12 @@ class DashboardView(
         # ----------------------------------------------------
         # RESPONSE
         # ----------------------------------------------------
+
+        # Re-fetch profile so current_streak_days reflects the
+        # recompute above (check_and_update_streak may have changed it).
+        profile = HealthProfile.objects.filter(
+            user=user
+        ).first()
 
         return Response({
             "user_name": (

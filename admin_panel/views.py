@@ -1,6 +1,7 @@
 from decimal import Decimal
 
 from rest_framework import status
+from rest_framework.parsers import JSONParser, MultiPartParser, FormParser
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from django.utils import timezone
@@ -358,16 +359,31 @@ class AdminFoodListView(APIView):
     (for the Food Database page). Reuses the same model the mobile
     app's /foods/ endpoint reads from — no separate admin-only food
     table.
+
+    parser_classes includes MultiPartParser/FormParser (on top of the
+    DRF default JSONParser) because the "Add Food Item" modal on the
+    frontend uploads an image as a File — that only arrives as
+    multipart/form-data, not JSON.
+
+    context={'request': request} is passed into the serializer so
+    AdminFoodItemSerializer.get_photoUrl() can build an absolute URL
+    for the uploaded image instead of a bare relative path.
     """
 
     permission_classes = [IsAdminRole]
+    parser_classes = [JSONParser, MultiPartParser, FormParser]
 
     def get(self, request):
         foods = Food.objects.all().order_by("name")
-        return Response(AdminFoodItemSerializer(foods, many=True).data)
+        serializer = AdminFoodItemSerializer(
+            foods, many=True, context={"request": request},
+        )
+        return Response(serializer.data)
 
     def post(self, request):
-        serializer = AdminFoodItemSerializer(data=request.data)
+        serializer = AdminFoodItemSerializer(
+            data=request.data, context={"request": request},
+        )
         if serializer.is_valid():
             serializer.save()
             return Response(serializer.data, status=status.HTTP_201_CREATED)

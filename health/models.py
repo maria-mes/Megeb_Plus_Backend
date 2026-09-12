@@ -319,6 +319,22 @@ class ExerciseLog(models.Model):
 
 
 class Food(models.Model):
+    """
+    Shared nutrition catalog — read by both mobile's /foods/ (diary
+    logging) and admin_panel's /admin/food (Food Database admin page).
+
+    IMPORTANT: calories_per_100g / protein_g / carbs_g / fat_g /
+    fiber_g are TRUE per-100g values. FoodDiaryViewSet.perform_create
+    scales them by the grams a user actually logs, so these columns
+    must stay real per-100g rates — never repurpose them to mean
+    "per whatever serving_label says".
+
+    serving_label is a separate, purely DESCRIPTIVE field for the
+    admin table's "Serving" column (e.g. "1 piece (60g)"). It carries
+    no numeric weight and is never used in any nutrition calculation —
+    there's no structured grams-per-serving input on the admin Food
+    Database form (frontend page.tsx) to compute one from.
+    """
     name = models.CharField(max_length=150)
     category = models.CharField(max_length=100, null=True, blank=True)
 
@@ -327,6 +343,14 @@ class Food(models.Model):
     carbs_g = models.DecimalField(max_digits=6, decimal_places=2)
     fat_g = models.DecimalField(max_digits=6, decimal_places=2)
     fiber_g = models.DecimalField(max_digits=6, decimal_places=2, default=0)
+
+    # Free-text display serving shown on the admin Food Database table
+    # (e.g. "1 piece (60g)"). Descriptive only — see class docstring.
+    serving_label = models.CharField(
+        max_length=100,
+        blank=True,
+        default=''
+    )
 
     # Photo shown on the mobile food picker and the admin Food Database
     # page. Optional — plenty of existing catalog rows were seeded

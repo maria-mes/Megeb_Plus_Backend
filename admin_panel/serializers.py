@@ -1054,9 +1054,81 @@ class PlatformSettingsSerializer(serializers.ModelSerializer):
 # ============================================================
 
 class AdminFoodItemSerializer(serializers.ModelSerializer):
+    """
+    Shapes health.Food to match the frontend's FoodItem type exactly
+    (admin/food-database/page.tsx):
+
+        { id, name, category, calories, protein, carbs, fat,
+          servingSize, photoUrl }
+
+    Field mapping:
+      - id                -> cast to string (frontend types id as string)
+      - calories/protein/carbs/fat -> calories_per_100g/protein_g/
+        carbs_g/fat_g directly. These stay TRUE per-100g values because
+        FoodDiaryViewSet.perform_create scales them by logged grams for
+        the food diary — do not repurpose them as "per serving" values.
+      - servingSize       -> serving_label (purely descriptive text,
+        not tied to any of the numbers above — see Food model docstring)
+      - photoUrl           -> image, absolute URL or null
+      - image (write-only) -> accepts the uploaded file on create/update;
+        maps directly onto the model's own `image` field.
+    """
+
+    id = serializers.CharField(read_only=True)
+
+    calories = serializers.DecimalField(
+        source="calories_per_100g", max_digits=7, decimal_places=2,
+    )
+    protein = serializers.DecimalField(
+        source="protein_g", max_digits=6, decimal_places=2,
+    )
+    carbs = serializers.DecimalField(
+        source="carbs_g", max_digits=6, decimal_places=2,
+    )
+    fat = serializers.DecimalField(
+        source="fat_g", max_digits=6, decimal_places=2,
+    )
+
+    servingSize = serializers.CharField(
+        source="serving_label",
+        required=False,
+        allow_blank=True,
+        max_length=100,
+    )
+
+    photoUrl = serializers.SerializerMethodField()
+
+    image = serializers.ImageField(
+        write_only=True, required=False, allow_null=True,
+    )
+
     class Meta:
         model = Food
-        fields = "__all__"
+        fields = [
+            "id",
+            "name",
+            "category",
+            "calories",
+            "protein",
+            "carbs",
+            "fat",
+            "servingSize",
+            "photoUrl",
+            "image",
+        ]
+
+    def get_photoUrl(self, obj):
+        if not obj.image:
+            return None
+
+        request = self.context.get("request")
+
+        try:
+            url = obj.image.url
+        except Exception:
+            return None
+
+        return request.build_absolute_uri(url) if request else url
 
 
 # ============================================================

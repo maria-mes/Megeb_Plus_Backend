@@ -161,7 +161,11 @@ class PublicVendorSerializer(
 
     Note: VendorProfile currently has no logo/image or description
     field, so those aren't included here. productCount is provided
-    as a lightweight signal of how much a vendor has listed.
+    as a lightweight signal of how much a vendor has listed. Contact
+    info (phone/email) lives on the linked User, not VendorProfile,
+    so it's pulled in via source="user.phone"/"user.email" — this was
+    previously missing entirely, which is why the mobile app only
+    ever showed the vendor's name/address and never contact info.
     """
 
     id = serializers.IntegerField(
@@ -183,6 +187,16 @@ class PublicVendorSerializer(
         read_only=True,
     )
 
+    phone = serializers.CharField(
+        source="user.phone",
+        read_only=True,
+    )
+
+    email = serializers.EmailField(
+        source="user.email",
+        read_only=True,
+    )
+
     productCount = serializers.SerializerMethodField()
 
     class Meta:
@@ -193,6 +207,8 @@ class PublicVendorSerializer(
             "businessName",
             "businessType",
             "address",
+            "phone",
+            "email",
             "productCount",
         ]
 
