@@ -3,7 +3,7 @@ from django.db import transaction
 from django.utils import timezone
 
 from rest_framework import status
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.parsers import (
     MultiPartParser,
     FormParser,
@@ -22,12 +22,46 @@ from .serializers import (
     VendorApplicationSerializer,
     VendorProfileSerializer,
     VendorProductSerializer,
+    PublicVendorSerializer,
 )
 
 from .ai_verifier import verify_application
 
 
 User = get_user_model()
+
+
+class PublicVendorListView(APIView):
+    """
+    Public: list all approved, active vendors (for the mobile
+    Vendors screen). No authentication required — this is a
+    public storefront listing, not vendor-account data.
+
+    Only vendors with is_verified=True and is_active=True are
+    returned; pending/unapproved applications never appear here.
+    """
+
+    permission_classes = [
+        AllowAny
+    ]
+
+    def get(self, request):
+
+        vendors = (
+            VendorProfile.objects
+            .filter(
+                is_verified=True,
+                is_active=True,
+            )
+            .order_by("business_name")
+        )
+
+        return Response(
+            PublicVendorSerializer(
+                vendors,
+                many=True,
+            ).data
+        )
 
 
 class VendorRegistrationView(APIView):

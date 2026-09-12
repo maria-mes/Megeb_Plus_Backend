@@ -1,4 +1,3 @@
-
 from datetime import timedelta
 
 from django.utils import timezone
@@ -17,22 +16,13 @@ from .models import PlatformSettings
 # ============================================================
 
 class AdminUserSerializer(serializers.ModelSerializer):
-    name = serializers.CharField(
-        source="full_name",
-        read_only=True,
-    )
+    name = serializers.CharField(source="full_name", read_only=True)
     status = serializers.SerializerMethodField()
     joinedDate = serializers.SerializerMethodField()
 
     class Meta:
         model = User
-        fields = [
-            "id",
-            "name",
-            "email",
-            "status",
-            "joinedDate",
-        ]
+        fields = ["id", "name", "email", "status", "joinedDate"]
 
     def get_status(self, obj):
         return "Active" if obj.is_active else "Suspended"
@@ -45,9 +35,7 @@ class AdminUserSerializer(serializers.ModelSerializer):
 # CLIENT APPOINTMENTS
 # ============================================================
 
-class AdminClientAppointmentSerializer(
-    serializers.ModelSerializer
-):
+class AdminClientAppointmentSerializer(serializers.ModelSerializer):
     nutritionist = serializers.SerializerMethodField()
     date = serializers.SerializerMethodField()
     time = serializers.SerializerMethodField()
@@ -55,13 +43,7 @@ class AdminClientAppointmentSerializer(
 
     class Meta:
         model = Appointment
-        fields = [
-            "id",
-            "nutritionist",
-            "date",
-            "time",
-            "status",
-        ]
+        fields = ["id", "nutritionist", "date", "time", "status"]
 
     def get_nutritionist(self, obj):
         if not obj.nutritionist:
@@ -99,22 +81,8 @@ class AdminClientAppointmentSerializer(
 # CLIENT LIST SERIALIZER
 # ============================================================
 
-class AdminClientListSerializer(
-    serializers.ModelSerializer
-):
-    """
-    Small response used by:
-
-        GET /api/auth/admin/clients
-
-    Matches the existing Next.js clients list page.
-    """
-
-    name = serializers.CharField(
-        source="full_name",
-        read_only=True,
-    )
-
+class AdminClientListSerializer(serializers.ModelSerializer):
+    name = serializers.CharField(source="full_name", read_only=True)
     age = serializers.SerializerMethodField()
     assignedNutritionist = serializers.SerializerMethodField()
     nextAppointment = serializers.SerializerMethodField()
@@ -122,7 +90,6 @@ class AdminClientListSerializer(
 
     class Meta:
         model = User
-
         fields = [
             "id",
             "name",
@@ -133,11 +100,7 @@ class AdminClientListSerializer(
         ]
 
     def _profile(self, obj):
-        return getattr(
-            obj,
-            "health_profile",
-            None,
-        )
+        return getattr(obj, "health_profile", None)
 
     def _upcoming_appointment(self, obj):
         appointments = getattr(
@@ -155,16 +118,10 @@ class AdminClientListSerializer(
             appointments
             .filter(
                 date__gte=today,
-                status__in=[
-                    "pending",
-                    "confirmed",
-                ],
+                status__in=["pending", "confirmed"],
             )
             .select_related("nutritionist")
-            .order_by(
-                "date",
-                "time",
-            )
+            .order_by("date", "time")
             .first()
         )
 
@@ -179,10 +136,7 @@ class AdminClientListSerializer(
     def get_assignedNutritionist(self, obj):
         appointment = self._upcoming_appointment(obj)
 
-        if (
-            appointment
-            and appointment.nutritionist
-        ):
+        if appointment and appointment.nutritionist:
             return appointment.nutritionist.full_name
 
         return None
@@ -202,9 +156,6 @@ class AdminClientListSerializer(
             day_text = "Tomorrow"
 
         else:
-            # %-d is not supported on Windows.
-            # Using strftime("%d").lstrip("0") keeps this
-            # compatible with Windows and Linux.
             day_text = (
                 f"{appointment.date.strftime('%b')} "
                 f"{appointment.date.strftime('%d').lstrip('0')}"
@@ -224,34 +175,12 @@ class AdminClientListSerializer(
 # CLIENT DETAIL SERIALIZER
 # ============================================================
 
-class AdminClientSerializer(
-    serializers.ModelSerializer
-):
-    """
-    Full client response used by:
-
-        GET /api/auth/admin/clients/<id>
-
-    Matches the existing Admin Client detail page.
-    """
-
-    # --------------------------------------------------------
-    # Basic user information
-    # --------------------------------------------------------
-
-    name = serializers.CharField(
-        source="full_name",
-        read_only=True,
-    )
-
+class AdminClientSerializer(serializers.ModelSerializer):
+    name = serializers.CharField(source="full_name", read_only=True)
     age = serializers.SerializerMethodField()
     gender = serializers.SerializerMethodField()
     status = serializers.SerializerMethodField()
     joinedDate = serializers.SerializerMethodField()
-
-    # --------------------------------------------------------
-    # Health
-    # --------------------------------------------------------
 
     height = serializers.SerializerMethodField()
     currentWeight = serializers.SerializerMethodField()
@@ -265,37 +194,20 @@ class AdminClientSerializer(
     activityLevel = serializers.SerializerMethodField()
     allergies = serializers.SerializerMethodField()
 
-    # --------------------------------------------------------
-    # Nutrition
-    # --------------------------------------------------------
-
     assignedNutritionist = serializers.SerializerMethodField()
     nutritionPlan = serializers.SerializerMethodField()
     calories = serializers.SerializerMethodField()
     dietType = serializers.SerializerMethodField()
 
-    # --------------------------------------------------------
-    # Progress
-    # --------------------------------------------------------
-
     progress = serializers.SerializerMethodField()
-
-    # --------------------------------------------------------
-    # Appointments
-    # --------------------------------------------------------
 
     nextAppointment = serializers.SerializerMethodField()
     appointments = serializers.SerializerMethodField()
-
-    # --------------------------------------------------------
-    # Notes
-    # --------------------------------------------------------
 
     nutritionistNotes = serializers.SerializerMethodField()
 
     class Meta:
         model = User
-
         fields = [
             "id",
             "name",
@@ -305,43 +217,27 @@ class AdminClientSerializer(
             "email",
             "status",
             "joinedDate",
-
             "assignedNutritionist",
-
             "height",
             "currentWeight",
             "targetWeight",
             "bmi",
-
             "goal",
             "goalDescription",
-
             "medicalCondition",
             "activityLevel",
             "allergies",
-
             "nutritionPlan",
             "calories",
             "dietType",
-
             "progress",
-
             "nextAppointment",
             "appointments",
-
             "nutritionistNotes",
         ]
 
-    # ========================================================
-    # Helpers
-    # ========================================================
-
     def _profile(self, obj):
-        return getattr(
-            obj,
-            "health_profile",
-            None,
-        )
+        return getattr(obj, "health_profile", None)
 
     def _goals(self, obj):
         manager = getattr(
@@ -364,15 +260,16 @@ class AdminClientSerializer(
             return None
 
         active_goals = [
-            goal
-            for goal in goals
-            if goal.status == "active"
+            g
+            for g in goals
+            if g.status == "active"
         ]
 
-        if active_goals:
-            return active_goals[0]
-
-        return goals[0]
+        return (
+            active_goals[0]
+            if active_goals
+            else goals[0]
+        )
 
     def _plans(self, obj):
         manager = getattr(
@@ -395,15 +292,16 @@ class AdminClientSerializer(
             return None
 
         active_plans = [
-            plan
-            for plan in plans
-            if plan.status == "Active"
+            p
+            for p in plans
+            if p.status == "Active"
         ]
 
-        if active_plans:
-            return active_plans[0]
-
-        return plans[0]
+        return (
+            active_plans[0]
+            if active_plans
+            else plans[0]
+        )
 
     def _appointments(self, obj):
         manager = getattr(
@@ -424,17 +322,15 @@ class AdminClientSerializer(
 
     def _upcoming_appointment(self, obj):
         appointments = self._appointments(obj)
-
         today = timezone.localdate()
 
         upcoming = [
-            appointment
-            for appointment in appointments
+            a
+            for a in appointments
             if (
-                appointment.date
-                and appointment.date >= today
-                and appointment.status
-                in [
+                a.date
+                and a.date >= today
+                and a.status in [
                     "pending",
                     "confirmed",
                 ]
@@ -442,9 +338,9 @@ class AdminClientSerializer(
         ]
 
         upcoming.sort(
-            key=lambda appointment: (
-                appointment.date,
-                appointment.time,
+            key=lambda a: (
+                a.date,
+                a.time,
             )
         )
 
@@ -454,25 +350,19 @@ class AdminClientSerializer(
             else None
         )
 
-    # ========================================================
-    # Basic information
-    # ========================================================
-
     def get_age(self, obj):
         profile = self._profile(obj)
 
-        if not profile:
-            return None
-
-        return profile.age
+        return (
+            profile.age
+            if profile
+            else None
+        )
 
     def get_gender(self, obj):
         profile = self._profile(obj)
 
-        if (
-            not profile
-            or not profile.gender
-        ):
+        if not profile or not profile.gender:
             return ""
 
         return profile.get_gender_display()
@@ -488,10 +378,6 @@ class AdminClientSerializer(
         return obj.created_at.strftime(
             "%Y-%m-%d"
         )
-
-    # ========================================================
-    # Health
-    # ========================================================
 
     def get_height(self, obj):
         profile = self._profile(obj)
@@ -548,21 +434,15 @@ class AdminClientSerializer(
         if profile.height_cm <= 0:
             return ""
 
-        height_m = (
-            float(profile.height_cm)
-            / 100
-        )
+        height_m = float(
+            profile.height_cm
+        ) / 100
 
-        bmi = (
-            float(profile.weight_kg)
-            / (height_m ** 2)
-        )
+        bmi = float(
+            profile.weight_kg
+        ) / (height_m ** 2)
 
         return f"{bmi:.1f}"
-
-    # ========================================================
-    # Goals
-    # ========================================================
 
     def get_goal(self, obj):
         profile = self._profile(obj)
@@ -589,10 +469,6 @@ class AdminClientSerializer(
 
         return ""
 
-    # ========================================================
-    # Medical / lifestyle
-    # ========================================================
-
     def get_medicalCondition(self, obj):
         profile = self._profile(obj)
 
@@ -604,10 +480,13 @@ class AdminClientSerializer(
 
         conditions = profile.medical_conditions
 
-        if isinstance(conditions, list):
+        if isinstance(
+            conditions,
+            list,
+        ):
             return ", ".join(
-                str(condition)
-                for condition in conditions
+                str(c)
+                for c in conditions
             )
 
         return str(conditions)
@@ -633,10 +512,13 @@ class AdminClientSerializer(
 
         allergies = profile.allergies or []
 
-        if isinstance(allergies, list):
+        if isinstance(
+            allergies,
+            list,
+        ):
             values.extend(
-                str(allergy)
-                for allergy in allergies
+                str(a)
+                for a in allergies
             )
         else:
             values.append(
@@ -650,20 +532,16 @@ class AdminClientSerializer(
 
         return ", ".join(values)
 
-    # ========================================================
-    # Nutrition
-    # ========================================================
-
     def get_assignedNutritionist(self, obj):
-        appointment = (
-            self._upcoming_appointment(obj)
-        )
+        appointment = self._upcoming_appointment(obj)
 
         if (
             appointment
             and appointment.nutritionist
         ):
-            return appointment.nutritionist.full_name
+            return (
+                appointment.nutritionist.full_name
+            )
 
         plan = self._latest_plan(obj)
 
@@ -671,17 +549,20 @@ class AdminClientSerializer(
             plan
             and plan.nutritionist
         ):
-            return plan.nutritionist.full_name
+            return (
+                plan.nutritionist.full_name
+            )
 
         return None
 
     def get_nutritionPlan(self, obj):
         plan = self._latest_plan(obj)
 
-        if not plan:
-            return ""
-
-        return plan.plan_name
+        return (
+            plan.plan_name
+            if plan
+            else ""
+        )
 
     def get_calories(self, obj):
         plan = self._latest_plan(obj)
@@ -718,10 +599,6 @@ class AdminClientSerializer(
         return [
             profile.get_diet_preference_display()
         ]
-
-    # ========================================================
-    # Progress
-    # ========================================================
 
     def get_progress(self, obj):
         logs = list(
@@ -777,14 +654,8 @@ class AdminClientSerializer(
             ),
         }
 
-    # ========================================================
-    # Appointments
-    # ========================================================
-
     def get_nextAppointment(self, obj):
-        appointment = (
-            self._upcoming_appointment(obj)
-        )
+        appointment = self._upcoming_appointment(obj)
 
         if not appointment:
             return None
@@ -802,9 +673,9 @@ class AdminClientSerializer(
         appointments = self._appointments(obj)
 
         appointments.sort(
-            key=lambda appointment: (
-                appointment.date,
-                appointment.time,
+            key=lambda a: (
+                a.date,
+                a.time,
             ),
             reverse=True,
         )
@@ -814,17 +685,13 @@ class AdminClientSerializer(
             many=True,
         ).data
 
-    # ========================================================
-    # Nutritionist notes
-    # ========================================================
-
     def get_nutritionistNotes(self, obj):
         appointments = self._appointments(obj)
 
         appointments.sort(
-            key=lambda appointment: (
-                appointment.date,
-                appointment.time,
+            key=lambda a: (
+                a.date,
+                a.time,
             ),
             reverse=True,
         )
@@ -851,62 +718,274 @@ class AdminClientSerializer(
 # NUTRITIONISTS
 # ============================================================
 
-class AdminNutritionistSerializer(
-    serializers.ModelSerializer
-):
+class AdminNutritionistSerializer(serializers.ModelSerializer):
+    """
+    Serializer for nutritionist staff applications.
+
+    Converts the StaffApplication database fields into the
+    camelCase structure expected by the admin frontend.
+    """
+
+    id = serializers.IntegerField(
+        read_only=True
+    )
+
+    fullName = serializers.CharField(
+        source="full_name",
+        read_only=True
+    )
+
     name = serializers.CharField(
         source="full_name",
+        read_only=True
+    )
+
+    email = serializers.EmailField(
+        read_only=True
+    )
+
+    phone = serializers.CharField(
         read_only=True,
+        allow_null=True
+    )
+
+    currentRole = serializers.CharField(
+        source="current_role",
+        read_only=True
     )
 
     specialty = serializers.CharField(
         source="specialization",
-        read_only=True,
+        read_only=True
     )
 
-    credentialType = serializers.CharField(
-        source="credential_type",
+    specialization = serializers.CharField(
+        read_only=True
+    )
+
+    yearsOfExperience = serializers.IntegerField(
+        source="years_of_experience",
         read_only=True,
+        allow_null=True
     )
 
     licenseNumber = serializers.CharField(
         source="license_number",
-        read_only=True,
+        read_only=True
     )
 
-    status = serializers.SerializerMethodField()
+    licenseState = serializers.CharField(
+        source="license_jurisdiction",
+        read_only=True
+    )
+
+    licenseExpiration = serializers.DateField(
+        source="license_expiration_date",
+        read_only=True,
+        allow_null=True
+    )
+
+    credentialType = serializers.CharField(
+        source="credential_type",
+        read_only=True
+    )
+
+    credentialNumber = serializers.CharField(
+        source="credential_number",
+        read_only=True
+    )
+
+    insuranceProvider = serializers.CharField(
+        source="insurance_provider",
+        read_only=True
+    )
+
+    policyNumber = serializers.CharField(
+        source="policy_number",
+        read_only=True
+    )
+
+    insuranceExpiration = serializers.DateField(
+        source="insurance_expiration_date",
+        read_only=True,
+        allow_null=True
+    )
+
+    coverageLimit = serializers.DecimalField(
+        source="coverage_limit",
+        max_digits=15,
+        decimal_places=2,
+        read_only=True,
+        allow_null=True
+    )
+
+    degree = serializers.CharField(
+        read_only=True
+    )
+
+    institution = serializers.CharField(
+        read_only=True
+    )
+
+    fieldOfStudy = serializers.CharField(
+        source="field_of_study",
+        read_only=True
+    )
+
+    graduationYear = serializers.IntegerField(
+        source="graduation_year",
+        read_only=True,
+        allow_null=True
+    )
+
+    submitted = serializers.SerializerMethodField()
+
     appliedDate = serializers.SerializerMethodField()
+
+    status = serializers.SerializerMethodField()
+
+    rejectionReason = serializers.CharField(
+        source="rejection_reason",
+        read_only=True,
+        allow_null=True
+    )
+
+    documents = serializers.SerializerMethodField()
+
+    aiStatus = serializers.CharField(
+        source="ai_status",
+        read_only=True
+    )
+
+    aiScore = serializers.DecimalField(
+        source="ai_score",
+        max_digits=5,
+        decimal_places=2,
+        read_only=True,
+        allow_null=True
+    )
 
     class Meta:
         model = StaffApplication
 
         fields = [
             "id",
+
+            # Basic information
+            "fullName",
             "name",
             "email",
+            "phone",
+
+            # Professional information
+            "currentRole",
             "specialty",
-            "credentialType",
+            "specialization",
+            "yearsOfExperience",
+
+            # License
             "licenseNumber",
-            "status",
+            "licenseState",
+            "licenseExpiration",
+
+            # Credential
+            "credentialType",
+            "credentialNumber",
+
+            # Insurance
+            "insuranceProvider",
+            "policyNumber",
+            "insuranceExpiration",
+            "coverageLimit",
+
+            # Education
+            "degree",
+            "institution",
+            "fieldOfStudy",
+            "graduationYear",
+
+            # Application
+            "submitted",
             "appliedDate",
+            "status",
+            "rejectionReason",
+
+            # Documents
+            "documents",
+
+            # AI verification
+            "aiStatus",
+            "aiScore",
         ]
 
     def get_status(self, obj):
+        if not obj.status:
+            return ""
+
         return obj.status.capitalize()
 
+    def get_submitted(self, obj):
+        if not obj.submitted_at:
+            return ""
+
+        return obj.submitted_at.strftime(
+            "%Y-%m-%d"
+        )
+
     def get_appliedDate(self, obj):
+        if not obj.created_at:
+            return ""
+
         return obj.created_at.strftime(
             "%Y-%m-%d"
         )
+
+    def get_documents(self, obj):
+        """
+        Return document metadata without accessing .url.
+
+        This prevents local serialization from requiring the
+        configured S3 storage backend.
+        """
+
+        documents = []
+
+        if obj.license_document:
+            documents.append({
+                "type": "license",
+                "name": "License Document",
+                "fileName": obj.license_document.name,
+            })
+
+        if obj.credential_document:
+            documents.append({
+                "type": "credential",
+                "name": "Credential Document",
+                "fileName": obj.credential_document.name,
+            })
+
+        if obj.insurance_document:
+            documents.append({
+                "type": "insurance",
+                "name": "Insurance Document",
+                "fileName": obj.insurance_document.name,
+            })
+
+        if obj.degree_document:
+            documents.append({
+                "type": "degree",
+                "name": "Degree Document",
+                "fileName": obj.degree_document.name,
+            })
+
+        return documents
 
 
 # ============================================================
 # APPOINTMENTS
 # ============================================================
 
-class AdminAppointmentSerializer(
-    serializers.ModelSerializer
-):
+class AdminAppointmentSerializer(serializers.ModelSerializer):
     client = serializers.CharField(
         source="client.full_name"
     )
@@ -921,7 +1000,6 @@ class AdminAppointmentSerializer(
 
     class Meta:
         model = Appointment
-
         fields = [
             "id",
             "client",
@@ -965,9 +1043,7 @@ class AdminAppointmentSerializer(
 # PLATFORM SETTINGS
 # ============================================================
 
-class PlatformSettingsSerializer(
-    serializers.ModelSerializer
-):
+class PlatformSettingsSerializer(serializers.ModelSerializer):
     class Meta:
         model = PlatformSettings
         fields = "__all__"
@@ -977,9 +1053,7 @@ class PlatformSettingsSerializer(
 # FOOD ITEMS
 # ============================================================
 
-class AdminFoodItemSerializer(
-    serializers.ModelSerializer
-):
+class AdminFoodItemSerializer(serializers.ModelSerializer):
     class Meta:
         model = Food
         fields = "__all__"
@@ -989,9 +1063,7 @@ class AdminFoodItemSerializer(
 # ADMIN PROFILE
 # ============================================================
 
-class AdminProfileSerializer(
-    serializers.ModelSerializer
-):
+class AdminProfileSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
         fields = [
@@ -1002,6 +1074,7 @@ class AdminProfileSerializer(
             "role",
             "is_active",
         ]
+
         read_only_fields = [
             "id",
             "role",
@@ -1013,10 +1086,150 @@ class AdminProfileSerializer(
 # FOOD VENDORS
 # ============================================================
 
-class AdminFoodVendorSerializer(
-    serializers.ModelSerializer
-):
+class AdminFoodVendorSerializer(serializers.ModelSerializer):
+
+    businessName = serializers.CharField(
+        source="business_name",
+        read_only=True
+    )
+
+    ownerName = serializers.CharField(
+        source="user.full_name",
+        read_only=True
+    )
+
+    email = serializers.EmailField(
+        source="user.email",
+        read_only=True
+    )
+
+    phone = serializers.CharField(
+        source="user.phone",
+        read_only=True
+    )
+
+    address = serializers.CharField(
+        source="business_address",
+        read_only=True
+    )
+
+    businessLicenseNumber = serializers.CharField(
+        source="license_number",
+        read_only=True
+    )
+
+    foodSafetyCertNumber = serializers.SerializerMethodField()
+
+    appliedDate = serializers.SerializerMethodField()
+
+    status = serializers.CharField(
+        source="get_status_display",
+        read_only=True
+    )
+
+    documents = serializers.SerializerMethodField()
+
     class Meta:
         model = VendorApplication
-        fields = "__all__"
 
+        fields = [
+            "id",
+            "businessName",
+            "ownerName",
+            "email",
+            "phone",
+            "address",
+            "businessLicenseNumber",
+            "foodSafetyCertNumber",
+            "appliedDate",
+            "status",
+            "documents",
+            "ai_status",
+            "ai_score",
+            "rejection_reason",
+        ]
+
+    def get_foodSafetyCertNumber(self, obj):
+        if not obj.food_safety_certificate:
+            return ""
+
+        return obj.food_safety_certificate.name.rsplit(
+            "/",
+            1
+        )[-1]
+
+    def get_appliedDate(self, obj):
+        if not obj.created_at:
+            return ""
+
+        return obj.created_at.strftime(
+            "%Y-%m-%d"
+        )
+
+    def _file_url(self, request, field_file):
+        """
+        Safely generate an absolute file URL.
+
+        If the configured storage backend is unavailable,
+        return None instead of crashing the entire API response.
+        """
+
+        if not field_file:
+            return None
+
+        try:
+            url = field_file.url
+
+            if request:
+                return request.build_absolute_uri(url)
+
+            return url
+
+        except Exception:
+            return None
+
+    def get_documents(self, obj):
+        request = self.context.get("request")
+
+        docs = []
+
+        if obj.license_document:
+            docs.append({
+                "label": "Business License",
+                "fileName": obj.license_document.name.rsplit(
+                    "/",
+                    1
+                )[-1],
+                "fileUrl": self._file_url(
+                    request,
+                    obj.license_document,
+                ),
+            })
+
+        if obj.food_safety_certificate:
+            docs.append({
+                "label": "Food Safety Certificate",
+                "fileName": obj.food_safety_certificate.name.rsplit(
+                    "/",
+                    1
+                )[-1],
+                "fileUrl": self._file_url(
+                    request,
+                    obj.food_safety_certificate,
+                ),
+            })
+
+        if obj.owner_id_document:
+            docs.append({
+                "label": "Owner ID",
+                "fileName": obj.owner_id_document.name.rsplit(
+                    "/",
+                    1
+                )[-1],
+                "fileUrl": self._file_url(
+                    request,
+                    obj.owner_id_document,
+                ),
+            })
+
+        return docs

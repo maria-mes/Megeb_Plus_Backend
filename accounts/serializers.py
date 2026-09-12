@@ -6,8 +6,6 @@ from rest_framework_simplejwt.serializers import (
     RefreshToken,
     TokenObtainPairSerializer,
 )
-from django.utils import timezone
-import json
 
 
 # ============================================================
@@ -44,14 +42,20 @@ class RegisterSerializer(serializers.ModelSerializer):
         write_only=True
     )
 
+    # FIX: allow_blank=True added so a "" sent by the frontend
+    # (e.g. an email-registration form that also submits an
+    # empty "phone" field, or vice versa) doesn't fail validation
+    # outright. Blanks are normalized to None in validate().
     email = serializers.EmailField(
         required=False,
-        allow_null=True
+        allow_null=True,
+        allow_blank=True
     )
 
     phone = serializers.CharField(
         required=False,
-        allow_null=True
+        allow_null=True,
+        allow_blank=True
     )
 
     class Meta:
@@ -66,6 +70,14 @@ class RegisterSerializer(serializers.ModelSerializer):
         ]
 
     def validate(self, data):
+
+        # FIX: normalize blank strings to None so "" behaves
+        # like the field wasn't provided at all.
+        if data.get("email") == "":
+            data["email"] = None
+
+        if data.get("phone") == "":
+            data["phone"] = None
 
         if data["password"] != data["confirm_password"]:
             raise serializers.ValidationError({
@@ -129,7 +141,6 @@ class LoginSerializer(serializers.Serializer):
         identifier = attrs.get("identifier")
         password = attrs.get("password")
 
-        # Find user by email OR phone
         user = User.objects.filter(
             Q(email=identifier) |
             Q(phone=identifier)
@@ -145,14 +156,12 @@ class LoginSerializer(serializers.Serializer):
                 "detail": "This account is inactive."
             })
 
-        # Invalidate previous tokens
         user.token_version += 1
 
         user.save(
             update_fields=["token_version"]
         )
 
-        # Generate JWT
         refresh = RefreshToken.for_user(user)
 
         refresh["token_version"] = user.token_version
@@ -290,11 +299,6 @@ class SendOTPSerializer(serializers.Serializer):
 class EmailRegisterSerializer(
     serializers.ModelSerializer
 ):
-    """
-    Step 1:
-    Register using email.
-    Registration is stored in PendingRegistration.
-    """
 
     password = serializers.CharField(
         write_only=True,
@@ -438,217 +442,156 @@ class ResetPasswordSerializer(serializers.Serializer):
 # VENDOR / NUTRITIONIST
 # ============================================================
 
-class StaffApplicationSerializer(serializers.ModelSerializer):
-    """
-    Serializer used when a vendor or nutritionist
-    submits a staff application.
-    """
-
-    password = serializers.CharField(write_only=True, min_length=8)
-    confirm_password = serializers.CharField(write_only=True)
-
-    class Meta:
-        model = StaffApplication
-        fields = [
-            "full_name", "email", "phone", "role",
-            "password", "confirm_password",
-            "current_role", "specialization", "years_of_experience",
-            "license_number", "license_jurisdiction", "license_expiration_date",
-            "credential_type", "credential_number",
-            "insurance_provider", "policy_number", "insurance_expiration_date", "coverage_limit",
-            "degree", "institution", "field_of_study", "graduation_year",
-            "license_document", "credential_document", "insurance_document", "degree_document",
-            "submitted_at", "created_at", "updated_at", "status",
-            "ai_status", "ai_score", "ai_result",
-            "rejection_reason", "reviewed_at",
-        ]
-
-        read_only_fields = [
-            "submitted_at", "created_at", "updated_at", "status",
-            "ai_status", "ai_score", "ai_result",
-            "rejection_reason", "reviewed_at",
-        ]
-
-    def to_internal_value(self, data):
-        """
-        Convert optional application_data JSON object
-        into individual StaffApplication model fields.
-        """
-
-        data = data.copy()
-        raw_application_data = data.get("application_data")
-
-        if raw_application_data:
-            if isinstance(raw_application_data, str):
-                try:
-                    application_data = json.loads(raw_application_data)
-                except json.JSONDecodeError:
-                    raise serializers.ValidationError({
-                        "application_data": "Invalid JSON. Check the JSON format."
-                    })
-            else:
-                application_data = raw_application_data
-
-            if not isinstance(application_data, dict):
-                raise serializers.ValidationError({
-                    "application_data": "Must be a JSON object."
-                })
-
-            mapping = {
-                "currentRole": "current_role",
-                "yearsOfExperience": "years_of_experience",
-                "specialization": "specialization",
-                "licenseNumber": "license_number",
-                "licenseState": "license_jurisdiction",
-                "licenseExpiration": "license_expiration_date",
-                "credentialType": "credential_type",
-                "credentialNumber": "credential_number",
-                "insuranceProvider": "insurance_provider",
-                "policyNumber": "policy_number",
-                "insuranceExpiration": "insurance_expiration_date",
-                "coverageLimit": "coverage_limit",
-                "degree": "degree",
-                "institution": "institution",
-                "fieldOfStudy": "field_of_study",
-                "graduationYear": "graduation_year",
-            }
-
-            for frontend_field, backend_field in mapping.items():
-                if frontend_field in application_data:
-                    data[backend_field] = application_data[frontend_field]
-
-            # Remove application_data since it's not a model field
-            data.pop("application_data", None)
-
-        return super().to_internal_value(data)
-
-    def validate(self, data):
-        if data["password"] != data["confirm_password"]:
-            raise serializers.ValidationError({
-                "confirm_password": "Passwords do not match."
-            })
-
-        if data["role"] not in ["nutritionist", "vendor"]:
-            raise serializers.ValidationError({
-                "role": "Role must be nutritionist or vendor."
-            })
-
-        if User.objects.filter(email=data["email"]).exists():
-            raise serializers.ValidationError({
-                "email": "This email is already registered."
-            })
-
-        if StaffApplication.objects.filter(email=data["email"], status="pending").exists():
-            raise serializers.ValidationError({
-                "email": "An application with this email is already pending."
-            })
-
-        return data
-
-    def create(self, validated_data):
-        validated_data.pop("confirm_password")
-        password = validated_data.pop("password")
-
-        validated_data["password"] = make_password(password)
-        validated_data["ai_status"] = "pending"
-        validated_data["status"] = "pending"
-
-        now = timezone.now()
-        validated_data["submitted_at"] = now
-        validated_data["updated_at"] = now
-
-        return StaffApplication.objects.create(**validated_data)
-
-class StaffApplicationListSerializer(
+class StaffApplicationSerializer(
     serializers.ModelSerializer
 ):
-    """
-    Serializer used by admin to view staff applications.
-    """
+
+    password = serializers.CharField(
+        write_only=True,
+        min_length=8
+    )
+
+    confirm_password = serializers.CharField(
+        write_only=True
+    )
 
     class Meta:
         model = StaffApplication
 
         fields = [
-
-            "id",
-
-            # -----------------------------------------
-            # Basic information
-            # -----------------------------------------
-
             "full_name",
             "email",
             "phone",
             "role",
 
-            # -----------------------------------------
-            # Professional information
-            # -----------------------------------------
+            "password",
+            "confirm_password",
 
             "current_role",
             "specialization",
             "years_of_experience",
 
-            # -----------------------------------------
-            # License information
-            # -----------------------------------------
-
             "license_number",
             "license_jurisdiction",
             "license_expiration_date",
 
-            # -----------------------------------------
-            # Credential information
-            # -----------------------------------------
-
             "credential_type",
             "credential_number",
-
-            # -----------------------------------------
-            # Insurance information
-            # -----------------------------------------
 
             "insurance_provider",
             "policy_number",
             "insurance_expiration_date",
             "coverage_limit",
 
-            # -----------------------------------------
-            # Education information
-            # -----------------------------------------
+            "degree",
+            "institution",
+            "field_of_study",
+            "graduation_year",
+
+            "license_document",
+            "credential_document",
+            "insurance_document",
+            "degree_document",
+        ]
+
+    def validate(self, data):
+
+        if data["password"] != data["confirm_password"]:
+            raise serializers.ValidationError({
+                "confirm_password": "Passwords do not match."
+            })
+
+        if data["role"] not in [
+            "nutritionist",
+            "vendor",
+        ]:
+            raise serializers.ValidationError({
+                "role": "Role must be nutritionist or vendor."
+            })
+
+        if User.objects.filter(
+            email=data["email"]
+        ).exists():
+            raise serializers.ValidationError({
+                "email": "This email is already registered."
+            })
+
+        if StaffApplication.objects.filter(
+            email=data["email"],
+            status="pending"
+        ).exists():
+            raise serializers.ValidationError({
+                "email": (
+                    "An application with this email "
+                    "is already pending."
+                )
+            })
+
+        return data
+
+    def create(self, validated_data):
+
+        validated_data.pop("confirm_password")
+
+        password = validated_data.pop("password")
+
+        validated_data["password"] = make_password(
+            password
+        )
+
+        return StaffApplication.objects.create(
+            **validated_data
+        )
+
+
+# ============================================================
+# STAFF APPLICATION LIST SERIALIZER
+# ADMIN
+# ============================================================
+
+class StaffApplicationListSerializer(
+    serializers.ModelSerializer
+):
+
+    class Meta:
+        model = StaffApplication
+
+        fields = [
+            "id",
+
+            "full_name",
+            "email",
+            "phone",
+            "role",
+
+            "current_role",
+            "specialization",
+            "years_of_experience",
+
+            "license_number",
+            "license_jurisdiction",
+            "license_expiration_date",
+
+            "credential_type",
+            "credential_number",
+
+            "insurance_provider",
+            "policy_number",
+            "insurance_expiration_date",
+            "coverage_limit",
 
             "degree",
             "institution",
             "field_of_study",
             "graduation_year",
 
-            # -----------------------------------------
-            # Documents
-            # -----------------------------------------
-
             "license_document",
             "credential_document",
             "insurance_document",
             "degree_document",
 
-            # -----------------------------------------
-            # Application status
-            # -----------------------------------------
-
             "status",
-            "ai_status",
-            "ai_score",
-            "ai_result",
-            "rejection_reason",
-
-            # -----------------------------------------
-            # Timestamps
-            # -----------------------------------------
-
-            "submitted_at",
             "created_at",
-            "updated_at",
             "reviewed_at",
             "reviewed_by",
         ]
@@ -661,10 +604,6 @@ class StaffApplicationListSerializer(
 class UpdateProfileSerializer(
     serializers.ModelSerializer
 ):
-    """
-    Allows a logged-in user to update their
-    basic profile information.
-    """
 
     class Meta:
         model = User

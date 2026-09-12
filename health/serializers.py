@@ -32,7 +32,13 @@ class HealthProfileSerializer(serializers.ModelSerializer):
         decimal_places=2,
         required=False,
         allow_null=True,
+        source='height_cm',
+        max_digits=5,
+        decimal_places=2,
+        required=False,
+        allow_null=True,
     )
+
 
     weight = serializers.DecimalField(
         source='weight_kg',
@@ -49,6 +55,8 @@ class HealthProfileSerializer(serializers.ModelSerializer):
         allow_null=True,
         write_only=True,
     )
+
+    target_weight = serializers.SerializerMethodField()
 
     class Meta:
         model = HealthProfile
@@ -80,7 +88,35 @@ class HealthProfileSerializer(serializers.ModelSerializer):
             'last_streak_date',
             'created_at',
             'updated_at',
+            'id',
+            'user',
+            'age',
+            'gender',
+            'height',
+            'weight',
+            'target_weight',
+            'activity_level',
+            'medical_conditions',
+            'allergies',
+            'other_allergy',
+            'diet_preference',
+            'meals_per_day',
+            'fasting_preference',
+            'health_goal',
+            'other_health_goal',
+            'calorie_target',
+            'protein_target_g',
+            'carbs_target_g',
+            'fat_target_g',
+            'water_target_glasses',
+            'water_glass_size_ml',
+            'current_streak_days',
+            'longest_streak_days',
+            'last_streak_date',
+            'created_at',
+            'updated_at',
         ]
+
 
         read_only_fields = [
             'id',

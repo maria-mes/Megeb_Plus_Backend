@@ -143,8 +143,7 @@ class NutritionistDirectorySerializer(serializers.ModelSerializer):
     user_id = serializers.IntegerField(
     source="user.id",
     read_only=True
-)
-
+    )
     currency = serializers.SerializerMethodField()
     availability = serializers.SerializerMethodField()
     
@@ -323,6 +322,7 @@ class ClientDetailSerializer(serializers.ModelSerializer):
          return None
 
         return float(goal.target_weight_kg)
+
 
     def get_bmi(self, obj):
         profile = self.get_health_profile(obj)

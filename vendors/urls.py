@@ -1,6 +1,7 @@
 from django.urls import path
 
 from .views import (
+    PublicVendorListView,
     VendorRegistrationView,
     MyVendorApplicationView,
     VendorProfileView,
@@ -11,6 +12,13 @@ from .views import (
 )
 
 urlpatterns = [
+
+    # Public
+    path(
+        "",
+        PublicVendorListView.as_view(),
+        name="public-vendor-list",
+    ),
 
     # Registration
     path(
