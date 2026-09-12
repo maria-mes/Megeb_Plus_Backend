@@ -56,7 +56,7 @@ class HealthProfileSerializer(serializers.ModelSerializer):
         write_only=True,
     )
 
-    target_weight = serializers.SerializerMethodField()
+    
 
     class Meta:
         model = HealthProfile
