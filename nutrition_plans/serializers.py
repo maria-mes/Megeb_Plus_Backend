@@ -561,22 +561,19 @@ class MealLibraryCreateSerializer(
         return meal
 
 
-class MealLibraryItemSerializer(
-    serializers.ModelSerializer
-):
-
-    food_id = serializers.IntegerField(
-        source="food.id",
-        read_only=True,
-    )
+class MealLibraryItemSerializer(serializers.ModelSerializer):
+    food_id = serializers.IntegerField(source="food.id", read_only=True)
+    food_name = serializers.CharField(source="food.name", read_only=True)
 
     class Meta:
         model = MealLibraryItem
         fields = [
             "id",
             "food_id",
+            "food_name",  # add this
             "quantity",
         ]
+
 
 
 class MealLibrarySerializer(

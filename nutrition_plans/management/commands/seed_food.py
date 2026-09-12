@@ -816,6 +816,9 @@ FOODS = [
         "fat": 49.2,
         "fiber": 8.5,
     },
+    
+    
+     
     {
         "name": "Almonds",
         "category": "Nuts & Seeds",
@@ -906,7 +909,8 @@ FOODS = [
         "fat": 60.8,
         "fiber": 9.7,
     },
-
+      
+      
 
     # ============================================================
     # OTHER
@@ -966,6 +970,20 @@ FOODS = [
         "fat": 0,
         "fiber": 0,
     },
+    
+    {
+    "name": "Peanut Butter",
+    "category": "Nuts & Seeds",
+    "unit_based": True,
+    "unit_name": "tablespoon",
+    "grams_per_unit": 16,   # 1 tbsp ≈ 16 g
+    "calories": 94,         # per tablespoon
+    "protein": 4.0,
+    "carbs": 3.0,
+    "fat": 8.0,
+    "fiber": 1.0,
+}
+
 ]
 
 
