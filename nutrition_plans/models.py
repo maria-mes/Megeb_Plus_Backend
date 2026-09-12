@@ -30,9 +30,7 @@ class Food(models.Model):
         decimal_places=2,
         default=100,
     )
-    preparation = models.CharField(max_length=100, blank=True, default="")
-    serving_description = models.CharField(max_length=255, blank=True, default="")
-
+    
     calories = models.DecimalField(
         max_digits=10,
         decimal_places=2,
@@ -68,14 +66,7 @@ class Food(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
-    class Meta:
-      ordering = ["name"]
-      constraints = [
-        models.UniqueConstraint(
-            fields=["name", "preparation"],
-            name="unique_food_preparation",
-        )
-    ]
+
 
     def __str__(self):
         return self.name
