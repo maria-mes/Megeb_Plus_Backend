@@ -447,9 +447,11 @@ class AdminVerificationRequestsView(APIView):
             {
                 "id": app.id,
                 "name": app.full_name,
-                "specialty": (app.application_data or {}).get("specialty")
-                or (app.application_data or {}).get("specialization")
-                or "",
+                # FIX: StaffApplication has no `application_data` field.
+                # `specialization` is a plain CharField on the model — the
+                # same field AdminNutritionistSerializer already maps via
+                # specialty = serializers.CharField(source="specialization").
+                "specialty": app.specialization or "",
                 "submitted": f"{timesince(app.created_at)} ago",
             }
             for app in applications
