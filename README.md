@@ -2,8 +2,6 @@
 
 Megeb Plus is an AI-powered nutrition and wellness platform. This repository contains the **Django REST Framework backend** that powers both the React Native mobile app and the Next.js web admin panel.
 
-> ⚠️ Some details below (exact package versions, `.env` variable names, deployment specifics) are marked as **TODO** — fill these in with the real values from your `requirements.txt` / `settings.py` before sharing this README, since they weren't available when this draft was generated.
-
 ---
 
 ## Table of Contents
@@ -128,13 +126,12 @@ python manage.py createsuperuser
 python manage.py runserver
 ```
 
-<!-- TODO: confirm these commands match your actual setup, especially if there's a custom management command for seeding the Food catalog -->
 
----
+
 
 ## Environment Variables
 
-<!-- TODO: fill in the real keys from your .env / settings.py — placeholders below are guesses based on the stack described -->
+
 
 ```env
 SECRET_KEY=
