@@ -11,6 +11,7 @@ from .views import (
     NutritionistAvailabilityView,
     NutritionistAvailabilityDetailView,
     PublicNutritionistAvailabilityView,
+    ConsultationDetailsView
 )
 
 
@@ -52,6 +53,11 @@ path(
     "<int:appointment_id>/consultation/",
     CreateConsultationView.as_view(),
     name="create-consultation",
+),
+    path(
+    "<int:appointment_id>/consultation/details/",
+    ConsultationDetailsView.as_view(),
+    name="consultation-details",
 ),
 
     path(
