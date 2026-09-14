@@ -10,6 +10,7 @@ from .views import (
     StartConsultationView,
     NutritionistAvailabilityView,
     NutritionistAvailabilityDetailView,
+    PublicNutritionistAvailabilityView,
 )
 
 
@@ -30,6 +31,18 @@ path(
     NutritionistAvailabilityDetailView.as_view(),
     name="nutritionist-availability-detail",
 ),
+
+path(
+    # Client-facing lookup by nutritionist ID — distinct from
+    # "availability/" above, which only ever returns the logged-in
+    # user's OWN slots and can't be used to browse someone else's
+    # schedule (this was the missing piece causing the empty
+    # PAYMENT AVAILABILITY LOAD RESULT after booking/payment).
+    "nutritionist/<int:nutritionist_id>/availability/",
+    PublicNutritionistAvailabilityView.as_view(),
+    name="public-nutritionist-availability",
+),
+
     path(
     "consultations/<int:consultation_id>/start/",
     StartConsultationView.as_view(),

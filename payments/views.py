@@ -27,6 +27,54 @@ from .starpay import (
 )
 
 
+def confirm_appointment_if_needed(payment):
+    """
+    Move the payment's linked appointment from "pending" to
+    "confirmed" once the payment is successful.
+
+    This is the piece that was missing: PaymentTransaction.status
+    flipping to "successful" (in VerifyPaymentView or
+    StarPayCallbackView) never used to touch Appointment.status at
+    all, so the appointment stayed "pending" forever even after a
+    real, confirmed payment — which is why the mobile app's "payment
+    received, but still being confirmed" message never resolved.
+
+    Called from BOTH VerifyPaymentView (client-triggered check) and
+    StarPayCallbackView (StarPay's webhook), since either one can be
+    the request that actually observes the successful status first —
+    StarPay's webhook and the client's manual "check status" tap are
+    racing against each other, not guaranteed to arrive in order.
+
+    Guarded with select_for_update() + a "only if still pending"
+    check so:
+      - two near-simultaneous calls (webhook + manual check) don't
+        double-process
+      - an appointment the client already cancelled in the meantime
+        is never silently flipped back to "confirmed"
+    """
+
+    if payment.status != PaymentTransaction.STATUS_SUCCESSFUL:
+        return
+
+    if not payment.appointment_id:
+        return
+
+    with transaction.atomic():
+        appointment = (
+            Appointment.objects
+            .select_for_update()
+            .filter(id=payment.appointment_id)
+            .first()
+        )
+
+        if not appointment:
+            return
+
+        if appointment.status == "pending":
+            appointment.status = "confirmed"
+            appointment.save(update_fields=["status", "updated_at"])
+
+
 class CreatePaymentView(APIView):
     """
     Create a StarPay payment for an appointment.
@@ -802,6 +850,12 @@ class VerifyPaymentView(APIView):
             ]
         )
 
+        # FIX: a successful payment never used to confirm the
+        # linked appointment — Appointment.status stayed "pending"
+        # forever, which is why the client kept seeing "payment
+        # received, but still being confirmed" with no way out.
+        confirm_appointment_if_needed(payment)
+
         # ---------------------------------------------------------
         # Return result
         # ---------------------------------------------------------
@@ -1033,6 +1087,13 @@ class StarPayCallbackView(APIView):
                 "updated_at",
             ]
         )
+
+        # FIX: same gap as VerifyPaymentView — StarPay's own webhook
+        # confirming a payment never used to confirm the appointment
+        # either. Called here too since the webhook can be the first
+        # (or only) signal of success, racing against the client's
+        # manual "check status" call.
+        confirm_appointment_if_needed(payment)
 
         return Response(
             {

@@ -376,6 +376,13 @@ class EndConsultationView(APIView):
             status=status.HTTP_200_OK
         )
 class NutritionistAvailabilityView(APIView):
+    """
+    Nutritionist-facing: manage MY OWN availability schedule.
+
+    GET returns only request.user's own slots — this is NOT usable
+    for a client looking up a specific nutritionist's availability
+    by ID (see PublicNutritionistAvailabilityView below for that).
+    """
 
     permission_classes = [IsAuthenticated]
 
@@ -477,3 +484,40 @@ class NutritionistAvailabilityDetailView(APIView):
         return Response(
             status=status.HTTP_204_NO_CONTENT
         )
+
+
+class PublicNutritionistAvailabilityView(APIView):
+    """
+    Client-facing: look up ONE nutritionist's active availability by
+    their user ID, for the booking flow (called after payment to show
+    open slots).
+
+    This is the endpoint that was MISSING. The only existing
+    availability endpoint (NutritionistAvailabilityView) filters by
+    `nutritionist=request.user` — i.e. it always returns whoever is
+    currently logged in's own slots. When a client called it hoping
+    to see nutritionist 38's schedule, `request.user` was the client
+    (who has zero NutritionistAvailability rows), so it silently
+    returned an empty list every time, regardless of which
+    nutritionistId the client actually wanted. The nutritionistId the
+    frontend computed (and logged as "normalizedNutritionistId") had
+    nowhere to go in that request at all.
+
+    IsAuthenticated (not AllowAny) since only logged-in clients should
+    be browsing nutritionist schedules — tighten further if needed.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, nutritionist_id):
+        availability = NutritionistAvailability.objects.filter(
+            nutritionist_id=nutritionist_id,
+            is_active=True,
+        ).order_by("day_of_week", "start_time")
+
+        serializer = NutritionistAvailabilitySerializer(
+            availability,
+            many=True,
+        )
+
+        return Response(serializer.data)
