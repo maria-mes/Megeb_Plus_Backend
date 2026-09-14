@@ -248,6 +248,40 @@ class CreateConsultationView(APIView):
             ).data,
             status=status.HTTP_201_CREATED
         )
+
+class ConsultationDetailsView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, appointment_id):
+        try:
+            appointment = Appointment.objects.get(
+                id=appointment_id
+            )
+        except Appointment.DoesNotExist:
+            return Response(
+                {"detail": "Appointment not found."},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        try:
+            consultation = Consultation.objects.get(
+                appointment=appointment
+            )
+        except Consultation.DoesNotExist:
+            return Response(
+                {"detail": "No consultation exists for this appointment."},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        return Response(
+            {
+                "id": consultation.id,
+                "appointment": appointment.id,
+                "status": consultation.status,
+                "meeting_url": consultation.meeting_url,
+            },
+            status=status.HTTP_200_OK
+        )
 class StartConsultationView(APIView):
 
     permission_classes = [IsAuthenticated]
