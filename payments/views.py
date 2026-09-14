@@ -29,50 +29,31 @@ from .starpay import (
 
 def confirm_appointment_if_needed(payment):
     """
-    Move the payment's linked appointment from "pending" to
-    "confirmed" once the payment is successful.
+    NOTE: This used to auto-flip the linked Appointment from "pending"
+    to "confirmed" the moment a payment succeeded. That was removed —
+    intended flow is:
 
-    This is the piece that was missing: PaymentTransaction.status
-    flipping to "successful" (in VerifyPaymentView or
-    StarPayCallbackView) never used to touch Appointment.status at
-    all, so the appointment stayed "pending" forever even after a
-    real, confirmed payment — which is why the mobile app's "payment
-    received, but still being confirmed" message never resolved.
+        Payment successful -> Appointment stays "pending"
+                            -> Nutritionist manually confirms
+                               (PATCH /appointments/{id}/confirm/,
+                               ConfirmAppointmentView)
+                            -> Appointment = "confirmed"
+                            -> Client sees confirmation
 
-    Called from BOTH VerifyPaymentView (client-triggered check) and
-    StarPayCallbackView (StarPay's webhook), since either one can be
-    the request that actually observes the successful status first —
-    StarPay's webhook and the client's manual "check status" tap are
-    racing against each other, not guaranteed to arrive in order.
+    Auto-confirming here meant the appointment was already
+    "confirmed" by the time the nutritionist looked at it, so
+    ConfirmAppointmentView's own "must still be pending" check
+    (appointments/views.py) rejected them with a 400 — nutritionists
+    could never actually confirm anything post-payment.
 
-    Guarded with select_for_update() + a "only if still pending"
-    check so:
-      - two near-simultaneous calls (webhook + manual check) don't
-        double-process
-      - an appointment the client already cancelled in the meantime
-        is never silently flipped back to "confirmed"
+    This function is now intentionally a no-op kept only so its call
+    sites (VerifyPaymentView, StarPayCallbackView) don't need to
+    change. If a distinct "awaiting_confirmation" status is added to
+    Appointment.STATUS_CHOICES later (to tell "unpaid pending" apart
+    from "paid, waiting on nutritionist" pending), this is where that
+    transition would go instead.
     """
-
-    if payment.status != PaymentTransaction.STATUS_SUCCESSFUL:
-        return
-
-    if not payment.appointment_id:
-        return
-
-    with transaction.atomic():
-        appointment = (
-            Appointment.objects
-            .select_for_update()
-            .filter(id=payment.appointment_id)
-            .first()
-        )
-
-        if not appointment:
-            return
-
-        if appointment.status == "pending":
-            appointment.status = "confirmed"
-            appointment.save(update_fields=["status", "updated_at"])
+    return
 
 
 class CreatePaymentView(APIView):
@@ -850,10 +831,10 @@ class VerifyPaymentView(APIView):
             ]
         )
 
-        # FIX: a successful payment never used to confirm the
-        # linked appointment — Appointment.status stayed "pending"
-        # forever, which is why the client kept seeing "payment
-        # received, but still being confirmed" with no way out.
+        # Payment success no longer auto-confirms the appointment —
+        # see confirm_appointment_if_needed()'s docstring above.
+        # The nutritionist confirms manually via
+        # PATCH /appointments/{id}/confirm/ instead.
         confirm_appointment_if_needed(payment)
 
         # ---------------------------------------------------------
@@ -1088,11 +1069,10 @@ class StarPayCallbackView(APIView):
             ]
         )
 
-        # FIX: same gap as VerifyPaymentView — StarPay's own webhook
-        # confirming a payment never used to confirm the appointment
-        # either. Called here too since the webhook can be the first
-        # (or only) signal of success, racing against the client's
-        # manual "check status" call.
+        # Payment success no longer auto-confirms the appointment —
+        # see confirm_appointment_if_needed()'s docstring above.
+        # The nutritionist confirms manually via
+        # PATCH /appointments/{id}/confirm/ instead.
         confirm_appointment_if_needed(payment)
 
         return Response(
